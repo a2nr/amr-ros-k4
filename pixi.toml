@@ -1,0 +1,34 @@
+[workspace]
+name     = "blockly-ros2-controller"
+version  = "0.1.0"
+channels = ["conda-forge", "robostack-jazzy"]
+platforms = ["linux-64", "linux-aarch64"]
+
+# Shared conda dependencies — available on both x86_64 and aarch64
+[dependencies]
+python                               = ">=3.11"
+ros-jazzy-rclpy                      = "*"
+ros-jazzy-rosidl-default-runtime     = "*"
+ros-jazzy-rosidl-default-generators  = "*"
+ros-jazzy-action-msgs                = "*"
+colcon-common-extensions             = "*"
+pytest                               = "*"
+
+# Desktop-only conda dependencies (not available / not needed on aarch64)
+# pyqtwebengine provides the Qt backend that pywebview needs on Linux.
+[target.linux-64.dependencies]
+nodejs                               = ">=18"
+pyqtwebengine                        = "*"
+qtpy                                 = "*"
+
+# pywebview is only on PyPI, not conda-forge.
+# Desktop-only — Raspberry Pi only runs Executor Node.
+[target.linux-64.pypi-dependencies]
+pywebview                            = "*"
+
+[tasks]
+build-interfaces = "colcon build --symlink-install --packages-select interfaces"
+executor         = { cmd = "bash -c 'source install/setup.bash && python -m executor.executor.executor_node'", depends-on = ["build-interfaces"] }
+app              = { cmd = "bash -c 'source install/setup.bash && python app/app.py'", depends-on = ["build-interfaces"] }
+test             = { cmd = "bash -c 'source install/setup.bash && PYTHONPATH=$PYTHONPATH:. pytest tests/ -v'", depends-on = ["build-interfaces"] }
+setup-ui         = "npm install blockly && mkdir -p app/ui/vendor && cp node_modules/blockly/blockly.min.js app/ui/vendor/ && cp node_modules/blockly/javascript_compressed.js app/ui/vendor/ && cp node_modules/blockly/blocks_compressed.js app/ui/vendor/ && cp node_modules/blockly/msg/en.js app/ui/vendor/"

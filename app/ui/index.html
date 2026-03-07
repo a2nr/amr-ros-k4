@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blockly ROS2 Robot Controller</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      background: #1e1e1e;
+      color: #d4d4d4;
+    }
+
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #2d2d2d;
+      border-bottom: 1px solid #404040;
+      flex-shrink: 0;
+    }
+
+    #toolbar button {
+      padding: 6px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: opacity 0.15s;
+    }
+
+    #toolbar button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    #btn-run {
+      background: #4caf50;
+      color: white;
+    }
+
+    #btn-step-over {
+      background: #2196f3;
+      color: white;
+    }
+
+    #btn-step-into {
+      background: #9c27b0;
+      color: white;
+    }
+
+    #btn-stop {
+      background: #f44336;
+      color: white;
+    }
+
+    #toolbar .separator {
+      width: 1px;
+      height: 24px;
+      background: #555;
+      margin: 0 4px;
+    }
+
+    #debug-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: auto;
+      font-size: 13px;
+    }
+
+    #debug-toggle input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+    }
+
+    #blockly-area {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #blockly-div {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+    }
+
+    #console-panel {
+      height: 150px;
+      background: #1a1a1a;
+      border-top: 1px solid #404040;
+      overflow-y: auto;
+      padding: 8px 12px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    #console-panel .log-entry {
+      padding: 1px 0;
+      white-space: pre-wrap;
+    }
+
+    #console-panel .log-info { color: #9cdcfe; }
+    #console-panel .log-success { color: #4ec9b0; }
+    #console-panel .log-error { color: #f48771; }
+    #console-panel .log-feedback { color: #dcdcaa; }
+  </style>
+</head>
+<body>
+  <!-- Toolbar -->
+  <div id="toolbar">
+    <button id="btn-run" onclick="onRunClick()">Run</button>
+    <button id="btn-step-over" onclick="stepOver()" disabled>Step Over</button>
+    <button id="btn-step-into" onclick="stepInto()" disabled>Step Into</button>
+    <div class="separator"></div>
+    <button id="btn-stop" onclick="stopExecution()" disabled>Stop</button>
+    <div id="debug-toggle">
+      <input type="checkbox" id="chk-debug" onchange="onDebugToggle(this.checked)">
+      <label for="chk-debug">Debug Mode</label>
+    </div>
+  </div>
+
+  <!-- Blockly Workspace -->
+  <div id="blockly-area">
+    <div id="blockly-div"></div>
+  </div>
+
+  <!-- Console Output -->
+  <div id="console-panel" id="console"></div>
+
+  <!-- Toolbox definition -->
+  <xml id="toolbox" style="display: none">
+    <category name="Robot" colour="#5b80a5">
+      <block type="led_on"></block>
+      <block type="led_off"></block>
+      <block type="delay"></block>
+    </category>
+    <category name="Logic" colour="#5b80a5">
+      <block type="controls_if"></block>
+      <block type="logic_compare"></block>
+      <block type="logic_operation"></block>
+      <block type="logic_boolean"></block>
+    </category>
+    <category name="Loops" colour="#5ba55b">
+      <block type="controls_repeat_ext">
+        <value name="TIMES">
+          <shadow type="math_number">
+            <field name="NUM">3</field>
+          </shadow>
+        </value>
+      </block>
+      <block type="controls_whileUntil"></block>
+    </category>
+    <category name="Math" colour="#5b67a5">
+      <block type="math_number"></block>
+      <block type="math_arithmetic"></block>
+    </category>
+    <category name="Variables" colour="#a55b80" custom="VARIABLE"></category>
+  </xml>
+
+  <!-- Load Blockly from local vendor files -->
+  <script src="vendor/blockly.min.js"></script>
+  <script src="vendor/blocks_compressed.js"></script>
+  <script src="vendor/javascript_compressed.js"></script>
+  <script src="vendor/en.js"></script>
+
+  <!-- Custom blocks and executor -->
+  <script src="blockly/blocks.js"></script>
+  <script src="blockly/executor.js"></script>
+
+  <script>
+    // Initialize Blockly workspace
+    const workspace = Blockly.inject('blockly-div', {
+      toolbox: document.getElementById('toolbox'),
+      grid: {
+        spacing: 20,
+        length: 3,
+        colour: '#333',
+        snap: true
+      },
+      zoom: {
+        controls: true,
+        wheel: true,
+        startScale: 1.0,
+        maxScale: 3,
+        minScale: 0.3,
+        scaleSpeed: 1.2
+      },
+      trashcan: true,
+      theme: Blockly.Themes.Classic,
+    });
+
+    // Resize handler
+    function onResize() {
+      const area = document.getElementById('blockly-area');
+      const div = document.getElementById('blockly-div');
+      div.style.width = area.offsetWidth + 'px';
+      div.style.height = area.offsetHeight + 'px';
+      Blockly.svgResize(workspace);
+    }
+    window.addEventListener('resize', onResize);
+    onResize();
+
+    // Console logging
+    function consoleLog(message, type = 'info') {
+      const panel = document.getElementById('console-panel');
+      const entry = document.createElement('div');
+      entry.className = `log-entry log-${type}`;
+      const time = new Date().toLocaleTimeString();
+      entry.textContent = `[${time}] ${message}`;
+      panel.appendChild(entry);
+      panel.scrollTop = panel.scrollHeight;
+    }
+
+    consoleLog('Blockly ROS2 Robot Controller initialized', 'info');
+  </script>
+</body>
+</html>

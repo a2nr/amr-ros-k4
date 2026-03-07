@@ -1,0 +1,15 @@
+# GOAL — satu instruksi untuk dieksekusi
+string command         # nama instruksi: "led_on", "delay", "move_forward"
+string[] param_keys    # nama-nama parameter, contoh: ["pin"]
+string[] param_values  # nilai-nilai parameter, contoh: ["3"]
+
+---
+
+# RESULT — dikirim setelah action selesai atau gagal
+bool success
+string message         # pesan sukses atau deskripsi error yang informatif
+
+---
+
+# FEEDBACK — dikirim selama eksekusi berlangsung
+string status          # "executing" | "done" | "error"
