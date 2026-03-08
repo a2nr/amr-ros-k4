@@ -141,37 +141,21 @@
   </div>
 
   <!-- Console Output -->
-  <div id="console-panel" id="console"></div>
+  <div id="console-panel"></div>
 
-  <!-- Toolbox definition -->
-  <xml id="toolbox" style="display: none">
-    <category name="Robot" colour="#5b80a5">
-      <block type="led_on"></block>
-      <block type="led_off"></block>
-      <block type="delay"></block>
-    </category>
-    <category name="Logic" colour="#5b80a5">
-      <block type="controls_if"></block>
-      <block type="logic_compare"></block>
-      <block type="logic_operation"></block>
-      <block type="logic_boolean"></block>
-    </category>
-    <category name="Loops" colour="#5ba55b">
-      <block type="controls_repeat_ext">
-        <value name="TIMES">
-          <shadow type="math_number">
-            <field name="NUM">3</field>
-          </shadow>
-        </value>
-      </block>
-      <block type="controls_whileUntil"></block>
-    </category>
-    <category name="Math" colour="#5b67a5">
-      <block type="math_number"></block>
-      <block type="math_arithmetic"></block>
-    </category>
-    <category name="Variables" colour="#a55b80" custom="VARIABLE"></category>
-  </xml>
+  <!-- Console logging (must be defined before other scripts that use consoleLog) -->
+  <script>
+    function consoleLog(message, type) {
+      type = type || 'info';
+      var panel = document.getElementById('console-panel');
+      var entry = document.createElement('div');
+      entry.className = 'log-entry log-' + type;
+      var time = new Date().toLocaleTimeString();
+      entry.textContent = '[' + time + '] ' + message;
+      panel.appendChild(entry);
+      panel.scrollTop = panel.scrollHeight;
+    }
+  </script>
 
   <!-- Load Blockly from local vendor files -->
   <script src="vendor/blockly.min.js"></script>
@@ -179,55 +163,32 @@
   <script src="vendor/javascript_compressed.js"></script>
   <script src="vendor/en.js"></script>
 
-  <!-- Custom blocks and executor -->
-  <script src="blockly/blocks.js"></script>
-  <script src="blockly/executor.js"></script>
+  <!-- Core infrastructure (load order matters) -->
+  <script src="blockly/core/registry.js"></script>
+  <script src="blockly/core/breakpoints.js"></script>
+  <script src="blockly/core/bridge.js"></script>
+  <script src="blockly/core/debug-engine.js"></script>
+  <script src="blockly/core/ui-controls.js"></script>
 
+  <!-- Block manifest and loader -->
+  <script src="blockly/blocks/manifest.js"></script>
+  <script src="blockly/loader.js"></script>
+
+  <!-- Workspace initialization -->
+  <script src="blockly/workspace-init.js"></script>
+
+  <!-- Initialize: load all blocks, then create workspace -->
   <script>
-    // Initialize Blockly workspace
-    const workspace = Blockly.inject('blockly-div', {
-      toolbox: document.getElementById('toolbox'),
-      grid: {
-        spacing: 20,
-        length: 3,
-        colour: '#333',
-        snap: true
-      },
-      zoom: {
-        controls: true,
-        wheel: true,
-        startScale: 1.0,
-        maxScale: 3,
-        minScale: 0.3,
-        scaleSpeed: 1.2
-      },
-      trashcan: true,
-      theme: Blockly.Themes.Classic,
-    });
+    // Global workspace variable — used by debug-engine.js and ui-controls.js
+    var workspace;
 
-    // Resize handler
-    function onResize() {
-      const area = document.getElementById('blockly-area');
-      const div = document.getElementById('blockly-div');
-      div.style.width = area.offsetWidth + 'px';
-      div.style.height = area.offsetHeight + 'px';
-      Blockly.svgResize(workspace);
-    }
-    window.addEventListener('resize', onResize);
-    onResize();
-
-    // Console logging
-    function consoleLog(message, type = 'info') {
-      const panel = document.getElementById('console-panel');
-      const entry = document.createElement('div');
-      entry.className = `log-entry log-${type}`;
-      const time = new Date().toLocaleTimeString();
-      entry.textContent = `[${time}] ${message}`;
-      panel.appendChild(entry);
-      panel.scrollTop = panel.scrollHeight;
-    }
-
-    consoleLog('Blockly ROS2 Robot Controller initialized', 'info');
+    loadAllBlocks()
+      .then(function () {
+        workspace = initWorkspace();
+      })
+      .catch(function (err) {
+        consoleLog('Failed to load blocks: ' + err.message, 'error');
+      });
   </script>
 </body>
 </html>

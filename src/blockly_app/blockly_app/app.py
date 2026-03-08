@@ -18,7 +18,7 @@ from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 
-from interfaces.action import BlocklyAction
+from blockly_interfaces.action import BlocklyAction
 
 logger = logging.getLogger(__name__)
 
@@ -167,8 +167,10 @@ def main():
     # Create pywebview API
     api = BlocklyAPI(node, action_client)
 
-    # Resolve path to UI
-    ui_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
+    # Resolve path to UI — ui/ is inside the Python module directory
+    # blockly_app/blockly_app/app.py → blockly_app/blockly_app/ui/
+    module_dir = os.path.dirname(os.path.abspath(__file__))
+    ui_dir = os.path.join(module_dir, "ui")
     index_path = os.path.join(ui_dir, "index.html")
 
     if not os.path.exists(index_path):

@@ -17,9 +17,13 @@ pytest                               = "*"
 # Desktop-only conda dependencies (not available / not needed on aarch64)
 # pyqtwebengine provides the Qt backend that pywebview needs on Linux.
 [target.linux-64.dependencies]
+ros-jazzy-desktop                    = "*"
 nodejs                               = ">=18"
 pyqtwebengine                        = "*"
 qtpy                                 = "*"
+
+[target.linux-aarch64.dependencies]
+ros-jazzy-ros-base                   = "*"
 
 # pywebview is only on PyPI, not conda-forge.
 # Desktop-only — Raspberry Pi only runs Executor Node.
@@ -27,8 +31,11 @@ qtpy                                 = "*"
 pywebview                            = "*"
 
 [tasks]
-build-interfaces = "colcon build --symlink-install --packages-select interfaces"
-executor         = { cmd = "bash -c 'source install/setup.bash && python -m executor.executor.executor_node'", depends-on = ["build-interfaces"] }
-app              = { cmd = "bash -c 'source install/setup.bash && python app/app.py'", depends-on = ["build-interfaces"] }
-test             = { cmd = "bash -c 'source install/setup.bash && PYTHONPATH=$PYTHONPATH:. pytest tests/ -v'", depends-on = ["build-interfaces"] }
-setup-ui         = "npm install blockly && mkdir -p app/ui/vendor && cp node_modules/blockly/blockly.min.js app/ui/vendor/ && cp node_modules/blockly/javascript_compressed.js app/ui/vendor/ && cp node_modules/blockly/blocks_compressed.js app/ui/vendor/ && cp node_modules/blockly/msg/en.js app/ui/vendor/"
+build-interfaces = "colcon build --symlink-install --packages-select blockly_interfaces"
+build-executor   = { cmd = "colcon build --symlink-install --packages-select blockly_executor", depends-on = ["build-interfaces"] }
+build-app        = { cmd = "colcon build --symlink-install --packages-select blockly_app", depends-on = ["build-interfaces"] }
+build            = { cmd = "colcon build --symlink-install", depends-on = ["build-interfaces"] }
+executor         = { cmd = "bash -c 'source install/setup.bash && ros2 run blockly_executor executor_node'", depends-on = ["build-executor"] }
+app              = { cmd = "bash -c 'source install/setup.bash && python -m blockly_app.app'", depends-on = ["build-app"] }
+test             = { cmd = "bash -c 'source install/setup.bash && PYTHONPATH=$PYTHONPATH:src/blockly_executor pytest src/blockly_executor/test/ -v'", depends-on = ["build-interfaces"] }
+setup-ui         = "npm install blockly && mkdir -p src/blockly_app/blockly_app/ui/vendor && cp node_modules/blockly/blockly.min.js src/blockly_app/blockly_app/ui/vendor/ && cp node_modules/blockly/javascript_compressed.js src/blockly_app/blockly_app/ui/vendor/ && cp node_modules/blockly/blocks_compressed.js src/blockly_app/blockly_app/ui/vendor/ && cp node_modules/blockly/msg/en.js src/blockly_app/blockly_app/ui/vendor/"

@@ -4,7 +4,7 @@ import rclpy
 from types import SimpleNamespace
 from rclpy.action import ActionClient
 from rclpy.node import Node
-from interfaces.action import BlocklyAction
+from blockly_interfaces.action import BlocklyAction
 
 
 @pytest.fixture(scope="session")

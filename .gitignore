@@ -17,6 +17,7 @@ __pycache__/
 *.pyo
 *.egg-info/
 dist/
+.pytest_cache/
 
 # IDE
 .vscode/

@@ -12,7 +12,7 @@ from .utils import parse_params
 
 # Import will work after colcon build of interfaces package.
 # The interfaces package must be built and sourced first.
-from interfaces.action import BlocklyAction
+from blockly_interfaces.action import BlocklyAction
 
 
 class ExecutorNode(Node):
