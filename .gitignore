@@ -33,5 +33,4 @@ Thumbs.db
 .ruff_cache/
 
 # Local project management & AI assistant notes (not for version control)
-PROJECT_MANAGEMENT.md
 CLAUDE.md
