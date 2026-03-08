@@ -6,8 +6,8 @@ from rclpy.action.server import ServerGoalHandle
 from rclpy.node import Node
 
 from .handlers import HandlerRegistry
-from .hardware.interface import HardwareInterface
 from .hardware.dummy_hardware import DummyHardware
+from .hardware.real_hardware import RealHardware
 from .utils import parse_params
 
 # Import will work after colcon build of interfaces package.
@@ -24,12 +24,17 @@ class ExecutorNode(Node):
     commands. Program sequencing is entirely controlled by Blockly.
     """
 
-    def __init__(self, hardware: HardwareInterface | None = None) -> None:
+    def __init__(self) -> None:
         super().__init__("blockly_executor_node")
 
-        if hardware is None:
+        use_real = self.declare_parameter("use_real_hardware", False).value
+
+        if use_real:
+            hardware = RealHardware(self)
+            self.get_logger().info("Using RealHardware (ROS2 topics/services to Pi)")
+        else:
             hardware = DummyHardware()
-            self.get_logger().info("Using DummyHardware (no real GPIO)")
+            self.get_logger().info("Using DummyHardware (no real hardware)")
 
         self._registry = HandlerRegistry(hardware)
 

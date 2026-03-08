@@ -195,17 +195,17 @@ amr-ros-k4/                                    # ROS2 Workspace root
     │   ├── blockly_executor/                   # Python module
     │   │   ├── __init__.py
     │   │   ├── executor_node.py                # ROS2 Action Server (thin wrapper)
-    │   │   ├── handlers/                       # Modular command handler system
-    │   │   │   ├── __init__.py                 # HandlerRegistry + auto-discovery
-    │   │   │   ├── base.py                     # HandlerModule ABC — contract
-    │   │   │   ├── gpio.py                     # GpioHandlers: led_on, led_off
-    │   │   │   └── timing.py                   # TimingHandlers: delay
+    │   │   ├── handlers/                       # @handler decorator + auto-discovery
+    │   │   │   ├── __init__.py                 # HandlerRegistry, @handler, auto-discover
+    │   │   │   ├── gpio.py                     # @handler("led_on"), @handler("led_off")
+    │   │   │   └── timing.py                   # @handler("delay")
     │   │   ├── utils.py                        # parse_params and helpers
     │   │   └── hardware/
     │   │       ├── __init__.py
     │   │       ├── interface.py                # HardwareInterface abstract class
     │   │       ├── dummy_hardware.py           # In-memory impl for dev & test
-    │   │       └── gpio_hardware.py            # Raspberry Pi GPIO impl
+    │   │       ├── real_hardware.py            # ROS2 topics/services to Pi nodes
+    │   │       └── gpio_hardware.py            # Direct RPi.GPIO (legacy)
     │   └── test/                               # Integration test suite
     │       ├── __init__.py
     │       ├── conftest.py                     # Shared fixtures: ros_context, exe_action
@@ -309,11 +309,17 @@ The app window opens with the Blockly workspace. Drag blocks from the toolbox, c
 
 ### 5.2 Running the Executor Node Standalone
 
-Useful for testing with `ros2 action send_goal` or custom clients:
+The executor has two hardware modes controlled by the ROS2 parameter `use_real_hardware`:
 
 ```bash
+# Dummy mode (default) — in-memory hardware, no real GPIO/motor access
 pixi run executor
+
+# Real hardware mode — communicates with hardware nodes on Raspberry Pi via ROS2 topics/services
+pixi run executor-hw
 ```
+
+The executor does NOT run on the Raspberry Pi directly. In real hardware mode, `RealHardware` creates ROS2 publishers/service clients that talk to hardware nodes running on the Pi.
 
 The executor logs all received goals and their results to the terminal.
 
@@ -424,57 +430,46 @@ Each block file calls `BlockRegistry.register()` with all metadata, so the toolb
 
 | Component | Description |
 |---|---|
-| [`ExecutorNode.__init__(hardware)`](src/blockly_executor/blockly_executor/executor_node.py:27) | Creates the Action Server on topic `execute_blockly_action`. Accepts optional `HardwareInterface`; defaults to `DummyHardware`. |
+| [`ExecutorNode.__init__()`](src/blockly_executor/blockly_executor/executor_node.py:27) | Creates the Action Server on topic `execute_blockly_action`. Reads ROS2 parameter `use_real_hardware` (bool, default `False`) to select `DummyHardware` or `RealHardware`. |
 | [`_goal_callback()`](src/blockly_executor/blockly_executor/executor_node.py:47) | Always returns `GoalResponse.ACCEPT` |
 | [`_execute_callback(goal_handle)`](src/blockly_executor/blockly_executor/executor_node.py:57) | Publishes "executing" feedback, calls `HandlerRegistry.execute()`, catches exceptions, always calls `goal_handle.succeed()` |
 | [`main()`](src/blockly_executor/blockly_executor/executor_node.py:117) | Entry point: `rclpy.init()` → `ExecutorNode()` → `rclpy.spin(node)` |
 
 **Important design decision:** The execute callback always calls `goal_handle.succeed()` regardless of whether the command succeeded or failed. The `result.success` and `result.message` fields communicate command-level outcome. Using `goal_handle.abort()` causes result delivery failures with `rmw_fastrtps_cpp`.
 
-#### [`blockly_executor/handlers/`](src/blockly_executor/blockly_executor/handlers/__init__.py) — Modular Command Handler System
+#### [`blockly_executor/handlers/`](src/blockly_executor/blockly_executor/handlers/__init__.py) — Decorator-Based Command Handlers
 
-**Purpose:** Maps command names to handler functions using a modular, auto-discovery pattern. Each handler category lives in its own module.
-
-**Architecture** mirrors the JS frontend's per-block file structure:
+**Purpose:** Maps command names to handler functions using `@handler` decorator and auto-discovery. Mirrors the JS frontend's `BlockRegistry.register()` pattern.
 
 ```
 handlers/
-├── __init__.py     # HandlerRegistry + auto-imports HANDLER_MODULES
-├── base.py         # HandlerModule ABC — contract for all handler modules
-├── gpio.py         # GpioHandlers: led_on, led_off
-└── timing.py       # TimingHandlers: delay
+├── __init__.py     # @handler decorator, auto-discovery, HandlerRegistry
+├── gpio.py         # @handler("led_on"), @handler("led_off")
+└── timing.py       # @handler("delay")
 ```
+
+**`@handler` decorator** — each handler is a plain function:
+
+```python
+from . import handler
+
+@handler("led_on")
+def handle_led_on(params: dict[str, str], hardware) -> tuple[bool, str]:
+    pin = int(params["pin"])
+    hardware.set_led(pin, True)
+    return (True, f"LED on pin {pin} turned ON")
+```
+
+**Auto-discovery:** On `HandlerRegistry.__init__`, all `.py` files in `handlers/` are imported automatically. The `@handler` decorator collects `(command, function)` pairs, and the registry binds `hardware` to each function. No manual imports or module lists needed.
 
 **HandlerRegistry** ([`handlers/__init__.py`](src/blockly_executor/blockly_executor/handlers/__init__.py)):
 
 | Method | Description |
 |---|---|
-| `HandlerRegistry.__init__(hardware)` | Auto-registers all `HANDLER_MODULES` with the hardware interface |
-| `register(command, handler)` | Adds a new command→handler mapping |
+| `HandlerRegistry.__init__(hardware)` | Auto-discovers handler modules, binds hardware to all `@handler` functions |
 | `execute(command, params)` | Looks up handler by name, returns `(False, "Unknown command: ...")` if not found |
 
-**HandlerModule** ([`handlers/base.py`](src/blockly_executor/blockly_executor/handlers/base.py)) — the contract:
-
-| Method | Description |
-|---|---|
-| `register(registry, hardware)` | Abstract. Must register all commands this module provides. |
-
-**GpioHandlers** ([`handlers/gpio.py`](src/blockly_executor/blockly_executor/handlers/gpio.py)):
-
-| Command | Description |
-|---|---|
-| `led_on` | Reads `params["pin"]`, calls `hardware.set_led(pin, True)` |
-| `led_off` | Reads `params["pin"]`, calls `hardware.set_led(pin, False)` |
-
-**TimingHandlers** ([`handlers/timing.py`](src/blockly_executor/blockly_executor/handlers/timing.py)):
-
-| Command | Description |
-|---|---|
-| `delay` | Reads `params["duration_ms"]`, calls `time.sleep()` |
-
-**Adding a new handler category:**
-1. Create `handlers/<category>.py` with a class extending `HandlerModule`
-2. Import and add to `HANDLER_MODULES` list in `handlers/__init__.py`
+**Adding a new handler:** Create `handlers/<name>.py`, use `@handler("command")`. That's it — no other files to edit.
 
 #### [`blockly_executor/utils.py`](src/blockly_executor/blockly_executor/utils.py) — Utility Functions
 
@@ -491,10 +486,20 @@ handlers/
 
 #### [`blockly_executor/hardware/dummy_hardware.py`](src/blockly_executor/blockly_executor/hardware/dummy_hardware.py) — Test/Dev Hardware
 
+In-memory implementation for development and testing. No ROS2 communication, no real hardware.
+
 | Attribute/Method | Description |
 |---|---|
-| [`led_states: dict[int, bool]`](src/blockly_executor/blockly_executor/hardware/dummy_hardware.py:15) | In-memory LED state storage |
-| [`call_log: list[str]`](src/blockly_executor/blockly_executor/hardware/dummy_hardware.py:16) | Log of all method calls for test inspection |
+| `led_states: dict[int, bool]` | In-memory LED state storage |
+| `call_log: list[str]` | Log of all method calls for test inspection |
+
+#### [`blockly_executor/hardware/real_hardware.py`](src/blockly_executor/blockly_executor/hardware/real_hardware.py) — Real Hardware via ROS2
+
+Communicates with hardware nodes running on the Raspberry Pi via ROS2 topics/services. Requires a `Node` reference to create publishers and service clients. The executor does NOT run on the Pi — it sends commands over the ROS2 network.
+
+| Parameter | Description |
+|---|---|
+| `node: Node` | ROS2 node used to create publishers/clients for Pi hardware nodes |
 
 ### 6.3 ROS2 Interfaces — `blockly_interfaces`
 
@@ -549,6 +554,7 @@ Tests for the `delay` command including timing verification (±100ms tolerance).
 | `build-app` | `colcon build --symlink-install --packages-select blockly_app` | `build-interfaces` |
 | `build` | `colcon build --symlink-install` | `build-interfaces` |
 | `executor` | `source install/setup.bash && ros2 run blockly_executor executor_node` | `build-executor` |
+| `executor-hw` | `... executor_node --ros-args -p use_real_hardware:=true` | `build-executor` |
 | `app` | `source install/setup.bash && python -m blockly_app.app` | `build-app` |
 | `test` | `source install/setup.bash && pytest src/blockly_executor/test/ -v` | `build-interfaces` |
 | `setup-ui` | Downloads Blockly via npm and copies to `src/blockly_app/blockly_app/ui/vendor/` | — |
@@ -557,19 +563,19 @@ Tests for the `delay` command including timing verification (±100ms tolerance).
 
 ## 7. Creating Custom Blocks in Blockly
 
-### 7.1 Overview: 2 Steps with Auto-Discovery
+### 7.1 Overview: Auto-Discovery on Both Sides
 
-The project uses a **BlockRegistry** pattern with auto-discovery. Adding a new block requires only **2 files**:
+Both JS and Python use the same pattern: **decorator/register + auto-discovery**. Adding a new block:
 
 ```
-Step     File                                                  Action
-────     ────                                                  ──────
-1. JS    src/blockly_app/blockly_app/ui/blockly/blocks/<name>.js   Create — block definition + code generator
+Step     File                                                       Action
+────     ────                                                       ──────
+1. JS    src/blockly_app/blockly_app/ui/blockly/blocks/<name>.js    Create — BlockRegistry.register({...})
          src/blockly_app/blockly_app/ui/blockly/blocks/manifest.js  Edit — add filename to BLOCK_FILES array
-2. Py    src/blockly_executor/blockly_executor/handlers.py          Edit — add Python handler
+2. Py    src/blockly_executor/blockly_executor/handlers/<name>.py   Create — @handler("command") function
 ```
 
-**Files that do NOT need changes:** [`index.html`](src/blockly_app/blockly_app/ui/index.html), [`conftest.py`](src/blockly_executor/test/conftest.py), [`executor_node.py`](src/blockly_executor/blockly_executor/executor_node.py), [`BlocklyAction.action`](src/blockly_interfaces/action/BlocklyAction.action). The toolbox is auto-generated from the registry.
+**Files that do NOT need changes:** [`index.html`](src/blockly_app/blockly_app/ui/index.html), [`conftest.py`](src/blockly_executor/test/conftest.py), [`executor_node.py`](src/blockly_executor/blockly_executor/executor_node.py), [`BlocklyAction.action`](src/blockly_interfaces/action/BlocklyAction.action), [`handlers/__init__.py`](src/blockly_executor/blockly_executor/handlers/__init__.py). Both toolbox and handler registry are auto-generated.
 
 ### 7.2 Step 1 — Create Block File (JS)
 
@@ -624,24 +630,23 @@ const BLOCK_FILES = [
 
 ### 7.3 Step 2 — Register Handler in Python
 
-Add the handler to an existing module (e.g., [`handlers/gpio.py`](src/blockly_executor/blockly_executor/handlers/gpio.py)), or create a new handler module under [`handlers/`](src/blockly_executor/blockly_executor/handlers/__init__.py). For a new category, create a file and add it to `HANDLER_MODULES` in `handlers/__init__.py`.
-
-Example — adding to an existing module or creating a new one:
+Create a new file in `handlers/` or add to an existing one. Use the `@handler` decorator — auto-discovery handles the rest.
 
 ```python
-# In HandlerRegistry._register_default_handlers():
-self.register("move_forward", self._handle_move_forward)
+# src/blockly_executor/blockly_executor/handlers/movement.py
+from . import handler
 
-# New handler method:
-def _handle_move_forward(self, params: dict[str, str]) -> tuple[bool, str]:
-    """Move robot forward with given speed and duration."""
+@handler("move_forward")
+def handle_move_forward(params: dict[str, str], hardware) -> tuple[bool, str]:
     speed = int(params["speed"])
     duration_ms = int(params["duration_ms"])
     if not (0 <= speed <= 100):
         raise ValueError(f"speed must be 0-100, got: {speed}")
-    self._hardware.move(direction="forward", speed=speed, duration_ms=duration_ms)
+    hardware.move(direction="forward", speed=speed, duration_ms=duration_ms)
     return (True, f"Moved forward at speed {speed} for {duration_ms}ms")
 ```
+
+No imports to update, no registry list to edit. The file is auto-discovered on startup.
 
 **Verify immediately** (no Blockly UI needed):
 
@@ -891,7 +896,224 @@ pixi run test -- src/blockly_executor/test/test_block_led_on.py::test_block_led_
 
 ---
 
-## 10. Troubleshooting & Known Issues
+## 10. Guide: Adding a New ROS2 Package
+
+Every new `ament_python` package under `src/` must follow this structure:
+
+```
+src/<package_name>/
+├── package.xml
+├── setup.py
+├── setup.cfg
+├── resource/
+│   └── <package_name>          # Empty file — ament index marker
+├── <package_name>/             # Python module — same name as package
+│   ├── __init__.py
+│   └── <your_node>.py
+└── test/
+    ├── __init__.py
+    └── test_<feature>.py
+```
+
+**setup.cfg:**
+```ini
+[develop]
+script_dir=$base/lib/<package_name>
+[install]
+install_scripts=$base/lib/<package_name>
+```
+
+**package.xml:**
+```xml
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd"
+            schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>PACKAGE_NAME</name>
+  <version>0.1.0</version>
+  <description>DESCRIPTION</description>
+  <maintainer email="dev@example.com">developer</maintainer>
+  <license>MIT</license>
+  <depend>rclpy</depend>
+  <test_depend>pytest</test_depend>
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
+```
+
+**setup.py:**
+```python
+from setuptools import setup, find_packages
+
+package_name = "PACKAGE_NAME"
+
+setup(
+    name=package_name,
+    version="0.1.0",
+    packages=find_packages(exclude=["test"]),
+    data_files=[
+        ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
+        ("share/" + package_name, ["package.xml"]),
+    ],
+    install_requires=["setuptools"],
+    entry_points={
+        "console_scripts": [
+            "node_name = PACKAGE_NAME.module:main",
+        ],
+    },
+)
+```
+
+**Steps:**
+1. `mkdir -p src/<package_name>/<package_name>`
+2. Create `package.xml`, `setup.py`, `setup.cfg` from templates above
+3. `touch src/<package_name>/resource/<package_name>`
+4. Add `__init__.py` and node files
+5. Add build/run tasks to `pixi.toml`
+6. `colcon build --symlink-install --packages-select <package_name>`
+
+---
+
+## 11. Blockly Block Types — Templates & Quick Reference
+
+### Block Type Overview
+
+| Pattern | Shape | Use Case | Example |
+|---------|-------|----------|---------|
+| **Statement block** | Top/bottom connectors | Perform an action | `led_on`, `delay`, `motor_stop` |
+| **Output block** | Left plug only | Return a sensor value | `read_distance`, `read_temperature` |
+| **Input block** | Input sockets | Accept values from other blocks | `move_to(x, y)` |
+
+### Template A — Statement Block (action command)
+
+```js
+BlockRegistry.register({
+  name: 'led_on',              // Must match Python handler name
+  category: 'Robot',
+  categoryColor: '#5b80a5',
+  color: '#4CAF50',
+  tooltip: 'Turn on LED at the specified GPIO pin',
+
+  definition: {
+    init: function () {
+      this.appendDummyInput()
+        .appendField('LED ON  pin')
+        // FieldNumber(default, min, max, step)
+        .appendField(new Blockly.FieldNumber(1, 0, 40, 1), 'PIN');
+
+      this.setPreviousStatement(true, null);  // connect above
+      this.setNextStatement(true, null);      // connect below
+      this.setColour('#4CAF50');
+      this.setTooltip('Turn on LED at the specified GPIO pin');
+    }
+  },
+
+  generator: function (block) {
+    const pin = block.getFieldValue('PIN');
+    return (
+      'highlightBlock(\'' + block.id + '\');\n' +
+      'await executeAction(\'led_on\', { pin: \'' + pin + '\' });\n'
+    );
+  }
+});
+```
+
+### Template B — Output Block (sensor value)
+
+```js
+BlockRegistry.register({
+  name: 'read_distance',
+  category: 'Sensors',
+  categoryColor: '#a5745b',
+  color: '#E91E63',
+  tooltip: 'Read distance from ultrasonic sensor in cm',
+  outputType: 'Number',
+
+  definition: {
+    init: function () {
+      this.appendDummyInput()
+        .appendField('Distance sensor')
+        .appendField(new Blockly.FieldDropdown([
+          ['Front', 'front'], ['Left', 'left'], ['Right', 'right'],
+        ]), 'SENSOR_ID');
+
+      this.setOutput(true, 'Number');  // left plug, no top/bottom connectors
+      this.setColour('#E91E63');
+      this.setTooltip('Read distance from ultrasonic sensor in cm');
+    }
+  },
+
+  // Output blocks return [code, order] ARRAY, not a string
+  generator: function (block) {
+    const sensorId = block.getFieldValue('SENSOR_ID');
+    const code =
+      '(await executeAction(\'read_distance\', { sensor_id: \'' + sensorId + '\' })).message';
+    return [code, javascript.Order.AWAIT];
+  }
+});
+```
+
+### Template C — Block with Value Inputs (accepts other blocks)
+
+```js
+BlockRegistry.register({
+  name: 'move_to',
+  category: 'Navigation',
+  categoryColor: '#5ba55b',
+  color: '#00BCD4',
+  tooltip: 'Move robot to target X and Y coordinates',
+
+  definition: {
+    init: function () {
+      // appendValueInput creates a socket where output blocks plug in
+      this.appendValueInput('X').setCheck('Number').appendField('Move to X');
+      this.appendValueInput('Y').setCheck('Number').appendField('Y');
+      this.setInputsInline(true);
+      this.setPreviousStatement(true, null);
+      this.setNextStatement(true, null);
+      this.setColour('#00BCD4');
+      this.setTooltip('Move robot to target X and Y coordinates');
+    }
+  },
+
+  generator: function (block) {
+    // valueToCode reads the plugged-in block, returns '0' if empty
+    const x = javascript.javascriptGenerator.valueToCode(block, 'X', javascript.Order.ATOMIC) || '0';
+    const y = javascript.javascriptGenerator.valueToCode(block, 'Y', javascript.Order.ATOMIC) || '0';
+    return (
+      'highlightBlock(\'' + block.id + '\');\n' +
+      'await executeAction(\'move_to\', { x: \'' + x + '\', y: \'' + y + '\' });\n'
+    );
+  }
+});
+```
+
+### Quick Reference: Blockly Field Types
+
+| Field Type | Code | Use Case |
+|------------|------|----------|
+| Number | `new Blockly.FieldNumber(default, min, max, step)` | Pin number, duration, speed |
+| Text | `new Blockly.FieldTextInput('default')` | Custom labels, names |
+| Dropdown | `new Blockly.FieldDropdown([['Label','value'], ...])` | Sensor selection, direction |
+| Checkbox | `new Blockly.FieldCheckbox('TRUE')` | On/off toggle |
+| Color | `new Blockly.FieldColour('#ff0000')` | LED color picker |
+| Angle | `new Blockly.FieldAngle(90)` | Rotation angle with dial |
+| Image | `new Blockly.FieldImage('url', width, height)` | Icon on block |
+
+### Quick Reference: Block Connection Types
+
+| Method | Effect | When to use |
+|--------|--------|-------------|
+| `setPreviousStatement(true)` + `setNextStatement(true)` | Stackable block | Action/command blocks |
+| `setOutput(true, type)` | Output plug — returns a value | Sensor/calculation blocks |
+| `appendDummyInput()` | Row with only inline fields | Simple blocks with fixed fields |
+| `appendValueInput('NAME')` | Input socket — accepts output blocks | Blocks that take dynamic values |
+| `appendStatementInput('DO')` | Statement socket — accepts block stack | Container blocks like loops, if-then |
+
+---
+
+## 12. Troubleshooting & Known Issues
 
 ### "Executor is already spinning" in `app.py`
 
@@ -949,5 +1171,3 @@ pixi run test
 **Impact:** This is **informational only**. pywebview tries GTK first, falls back to Qt (which is installed via `pyqtwebengine`). The application works correctly with the Qt backend.
 
 ---
-
-*This documentation was generated for the Blockly ROS2 Robot Controller project. For project management and task tracking, see [`PROJECT_MANAGEMENT.md`](PROJECT_MANAGEMENT.md).*

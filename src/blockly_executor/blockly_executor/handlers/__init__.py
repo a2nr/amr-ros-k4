@@ -1,77 +1,79 @@
 """
-Handler registry and auto-discovery for command handler modules.
+Handler registry with @handler decorator and auto-discovery.
 
-Each handler module in this package implements the HandlerModule interface
-and registers its commands with the HandlerRegistry during initialization.
+To add a new command handler:
+1. Create a .py file in this directory (or add to an existing one)
+2. Use the @handler decorator:
 
-To add a new handler category:
-1. Create a new file (e.g., movement.py) with a class extending HandlerModule
-2. Add an import and instantiation in HANDLER_MODULES below
+    from . import handler
+
+    @handler("my_command")
+    def handle_my_command(params, hardware):
+        value = params["key"]
+        return (True, f"Done: {value}")
+
+That's it. The file is auto-discovered, the function is auto-registered.
 """
 
+from __future__ import annotations
+
+import importlib
+import pkgutil
+from pathlib import Path
 from typing import Callable
 
 from ..hardware.interface import HardwareInterface
-from .base import HandlerModule
 
-# Import all handler modules
-from .gpio import GpioHandlers
-from .timing import TimingHandlers
+# Global list that collects (command_name, function) pairs during import.
+# Each @handler("name") call appends here. HandlerRegistry.__init__
+# consumes this list and binds hardware to each function.
+_REGISTERED_HANDLERS: list[tuple[str, Callable]] = []
 
-# All handler modules to be auto-registered.
-# Add new handler module instances here when creating new categories.
-HANDLER_MODULES: list[HandlerModule] = [
-    GpioHandlers(),
-    TimingHandlers(),
-]
+
+def handler(command: str) -> Callable:
+    """Decorator that registers a function as a command handler.
+
+    The decorated function must accept (params: dict[str,str], hardware) and
+    return (bool, str).
+    """
+
+    def decorator(fn: Callable) -> Callable:
+        _REGISTERED_HANDLERS.append((command, fn))
+        return fn
+
+    return decorator
+
+
+def _auto_discover_handlers() -> None:
+    """Import all .py modules in this package to trigger @handler decorators."""
+    package_dir = Path(__file__).parent
+    for module_info in pkgutil.iter_modules([str(package_dir)]):
+        if module_info.name.startswith("_"):
+            continue
+        importlib.import_module(f".{module_info.name}", __package__)
 
 
 class HandlerRegistry:
-    """
-    Registry of command handlers that maps command names to handler functions.
+    """Maps command names to handler functions.
 
-    Each handler receives a params dict and returns a tuple of
-    (success: bool, message: str).
-
-    Handler modules are auto-registered from HANDLER_MODULES during init.
+    On init, auto-discovers all handler modules in this package and binds
+    the hardware interface to each registered handler.
     """
 
     def __init__(self, hardware: HardwareInterface) -> None:
         self._hardware = hardware
         self._handlers: dict[str, Callable[[dict[str, str]], tuple[bool, str]]] = {}
-        self._register_all_modules()
 
-    def _register_all_modules(self) -> None:
-        """Auto-register all handler modules from HANDLER_MODULES."""
-        for module in HANDLER_MODULES:
-            module.register(self, self._hardware)
+        _auto_discover_handlers()
 
-    def register(
-        self,
-        command: str,
-        handler: Callable[[dict[str, str]], tuple[bool, str]],
-    ) -> None:
-        """Register a new command handler."""
-        self._handlers[command] = handler
+        for command, fn in _REGISTERED_HANDLERS:
+            self._handlers[command] = lambda params, _fn=fn: _fn(params, hardware)
 
     def execute(self, command: str, params: dict[str, str]) -> tuple[bool, str]:
-        """
-        Execute a command by name with given parameters.
-
-        Args:
-            command: The command name (e.g. "led_on", "delay").
-            params: Dictionary of parameters for the command.
-
-        Returns:
-            Tuple of (success, message).
-
-        Raises:
-            KeyError: If a required parameter is missing from params.
-        """
-        handler = self._handlers.get(command)
-        if handler is None:
+        handler_fn = self._handlers.get(command)
+        if handler_fn is None:
             return (False, f"Unknown command: '{command}'")
-        return handler(params)
+        return handler_fn(params)
 
 
-__all__ = ["HandlerRegistry", "HandlerModule", "HANDLER_MODULES"]
+__all__ = ["HandlerRegistry", "handler"]
