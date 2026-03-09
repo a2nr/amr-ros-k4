@@ -1,0 +1,24 @@
+{
+  "blocks": {
+    "languageVersion": 0,
+    "blocks": [
+      {
+        "type": "controls_if",
+        "id": "WLmpkq!^,rcoKGH+bQgN",
+        "x": 210,
+        "y": 70,
+        "inputs": {
+          "DO0": {
+            "block": {
+              "type": "led_on",
+              "id": "._%j-2DZ*BZJlyW:1#`Q",
+              "fields": {
+                "PIN": 1
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}

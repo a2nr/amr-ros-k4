@@ -20,6 +20,17 @@ function initWorkspace() {
   // Build toolbox from registry
   const toolbox = BlockRegistry.getToolboxJSON();
 
+  // Dark theme — fixes toolbox text visibility against dark UI background
+  const DarkTheme = Blockly.Theme.defineTheme('dark-ros2', {
+    base: Blockly.Themes.Classic,
+    componentStyles: {
+      toolboxBackgroundColour: '#252526',
+      toolboxForegroundColour: '#cccccc',
+      flyoutBackgroundColour: '#2d2d2d',
+      flyoutOpacity: 0.95,
+    },
+  });
+
   // Inject Blockly workspace
   const ws = Blockly.inject('blockly-div', {
     toolbox: toolbox,
@@ -38,7 +49,7 @@ function initWorkspace() {
       scaleSpeed: 1.2,
     },
     trashcan: true,
-    theme: Blockly.Themes.Classic,
+    theme: DarkTheme,
   });
 
   // Set up breakpoint click listener
@@ -48,6 +59,14 @@ function initWorkspace() {
       if (block && debugModeActive) {
         toggleBreakpoint(block);
       }
+    }
+  });
+
+  // Refresh Code tab when blocks change
+  ws.addChangeListener(function () {
+    const codePanel = document.getElementById('code-panel');
+    if (codePanel && codePanel.style.display !== 'none') {
+      refreshCodePanel();
     }
   });
 

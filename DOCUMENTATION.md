@@ -234,7 +234,9 @@ amr-ros-k4/                                    # ROS2 Workspace root
                     │   ├── breakpoints.js      # Debug breakpoint management
                     │   ├── bridge.js           # executeAction — pywebview bridge
                     │   ├── debug-engine.js     # Run, debug, step, stop logic
-                    │   └── ui-controls.js      # Button states and callbacks
+                    │   ├── ui-controls.js      # Button states and callbacks
+                    │   ├── ui-tabs.js          # switchTab(), refreshCodePanel()
+                    │   └── workspace-io.js     # exportWorkspace(), importWorkspace()
                     ├── blocks/                 # One file per block (auto-discovered)
                     │   ├── manifest.js         # BLOCK_FILES array
                     │   ├── led_on.js
@@ -357,10 +359,13 @@ If the executor is not running, tests are **skipped** with an informative messag
 
 | Component | Description |
 |---|---|
-| [`_wait_for_future(future, timeout_sec)`](src/blockly_app/blockly_app/app.py:26) | Polls `future.done()` without calling `rclpy.spin()`. Used because the node is already being spun by a background thread. |
-| [`BlocklyAPI`](src/blockly_app/blockly_app/app.py:46) | Python class exposed to JavaScript via pywebview. Its methods are callable as `window.pywebview.api.<method>()`. |
-| [`BlocklyAPI.execute_action()`](src/blockly_app/blockly_app/app.py:61) | Sends a ROS2 Action Goal and blocks until the result arrives. Returns `{success: bool, message: str}` to JavaScript. |
-| [`main()`](src/blockly_app/blockly_app/app.py:145) | Initializes rclpy, creates the Action Client, starts the background spin thread with `MultiThreadedExecutor`, creates the pywebview window, and handles cleanup on exit. |
+| [`_native_save_dialog()` / `_native_open_dialog()`](src/blockly_app/blockly_app/app.py:29) | Opens native OS file dialogs via `tkinter.filedialog`. Uses Tcl/Tk interpreter separate from Qt — no thread conflict. Available in pixi environment without extra dependencies. |
+| [`_wait_for_future(future, timeout_sec)`](src/blockly_app/blockly_app/app.py:63) | Polls `future.done()` without calling `rclpy.spin()`. Used because the node is already being spun by a background thread. |
+| [`BlocklyAPI`](src/blockly_app/blockly_app/app.py:80) | Python class exposed to JavaScript via pywebview. Its methods are callable as `window.pywebview.api.<method>()`. |
+| [`BlocklyAPI.execute_action()`](src/blockly_app/blockly_app/app.py:95) | Sends a ROS2 Action Goal and blocks until the result arrives. Returns `{success: bool, message: str}` to JavaScript. |
+| [`BlocklyAPI.save_workspace(json_string)`](src/blockly_app/blockly_app/app.py:145) | Opens native "Save As" dialog via tkinter, writes workspace JSON to chosen file. Returns `{success, path}` directly to JS. |
+| [`BlocklyAPI.load_workspace()`](src/blockly_app/blockly_app/app.py:168) | Opens native "Open" dialog via tkinter, reads and validates JSON, returns `{success, data, path}` to JS. |
+| [`main()`](src/blockly_app/blockly_app/app.py:190) | Initializes rclpy, creates the Action Client, starts the background spin thread with `MultiThreadedExecutor`, creates the pywebview window, and handles cleanup on exit. |
 
 **Threading design:** The `main()` function starts `MultiThreadedExecutor.spin()` in a daemon thread. When JavaScript calls `execute_action()`, the method uses `_wait_for_future()` to poll for completion — it never calls `rclpy.spin_until_future_complete()`, which would conflict with the background spin.
 
@@ -376,7 +381,7 @@ If the executor is not running, tests are **skipped** with an informative messag
 
 **Script loading order** (fixed — never needs changing when adding blocks):
 1. `vendor/blockly.min.js` + other Blockly libs
-2. `blockly/core/registry.js` → `breakpoints.js` → `bridge.js` → `debug-engine.js` → `ui-controls.js`
+2. `blockly/core/registry.js` → `breakpoints.js` → `bridge.js` → `debug-engine.js` → `ui-controls.js` → `ui-tabs.js` → `workspace-io.js`
 3. `blockly/blocks/manifest.js` + `blockly/loader.js`
 4. `blockly/workspace-init.js`
 5. Inline script: `loadAllBlocks().then(() => initWorkspace())`
@@ -390,6 +395,28 @@ If the executor is not running, tests are **skipped** with an informative messag
 | `BlockRegistry.register(config)` | Register a block with name, category, color, definition, and generator |
 | `BlockRegistry.getBlocks()` | Get all registered blocks |
 | `BlockRegistry.getToolboxJSON()` | Build Blockly toolbox JSON from registered blocks + built-in categories |
+
+#### [`blockly_app/ui/blockly/core/ui-tabs.js`](src/blockly_app/blockly_app/ui/blockly/core/ui-tabs.js) — Tab Switching
+
+**Purpose:** Manages switching between the **Blocks** editor tab and the **Code** preview tab.
+
+| Function | Description |
+|---|---|
+| `switchTab(tab)` | Shows/hides `#blockly-area` and `#code-panel`. Calls `Blockly.svgResize()` when returning to Blocks tab (canvas dimensions are zeroed while hidden). |
+| `refreshCodePanel()` | Regenerates JS code from workspace via `javascript.javascriptGenerator.workspaceToCode()` and displays in `#code-output`. |
+
+The Code tab updates automatically on every workspace change (via a change listener in `workspace-init.js`).
+
+#### [`blockly_app/ui/blockly/core/workspace-io.js`](src/blockly_app/blockly_app/ui/blockly/core/workspace-io.js) — Workspace Export/Import
+
+**Purpose:** Exports workspace to JSON (Save As dialog) and imports from JSON (Open dialog) via the Python bridge.
+
+| Function | Description |
+|---|---|
+| `exportWorkspace()` | Serializes workspace with `Blockly.serialization.workspaces.save()`, calls `window.pywebview.api.save_workspace(json)`, logs result path. |
+| `importWorkspace()` | Calls `window.pywebview.api.load_workspace()`, clears workspace, loads returned JSON with `Blockly.serialization.workspaces.load()`. |
+
+Both functions use `async/await` — they return after the file dialog closes and the file has been read/written.
 
 #### [`blockly_app/ui/blockly/core/bridge.js`](src/blockly_app/blockly_app/ui/blockly/core/bridge.js) — pywebview Bridge
 
@@ -1163,6 +1190,17 @@ pixi run executor
 # Terminal 2
 pixi run test
 ```
+
+### Export/Import button has no effect (force close or nothing happens)
+
+**Symptom:** Clicking Export or Import either force-closes the app or does nothing.
+
+**Cause:** Qt file dialogs (`QFileDialog`, `pywebview.create_file_dialog`) must run on the Qt main thread. pywebview calls Python API methods from a background thread. Attempting to open a Qt dialog from there causes:
+- `pywebview.create_file_dialog` → deadlock via `BlockingQueuedConnection` → force close
+- `QFileDialog` via `QTimer.singleShot` → no effect, because non-QThread background threads have no Qt event loop
+
+**Solution:** Use `tkinter.filedialog` — tkinter uses its own Tcl/Tk interpreter, completely separate from Qt. `filedialog.asksaveasfilename()` blocks the calling background thread until the user responds. Already available in the pixi environment (no extra dependency needed).
+See [`_native_save_dialog()`](src/blockly_app/blockly_app/app.py:29) in `app.py`.
 
 ### pywebview shows "GTK cannot be loaded"
 

@@ -6,11 +6,15 @@ in a background thread. The BlocklyAPI class exposes execute_action()
 to JavaScript, bridging Blockly's runtime with the ROS2 Executor Node.
 """
 
+import json
 import os
 import sys
 import time
 import threading
 import logging
+
+import tkinter as _tk
+from tkinter import filedialog as _filedialog
 
 import webview
 import rclpy
@@ -21,6 +25,43 @@ from rclpy.executors import MultiThreadedExecutor
 from blockly_interfaces.action import BlocklyAction
 
 logger = logging.getLogger(__name__)
+
+
+def _native_save_dialog(suggested: str = "workspace.json") -> str:
+    """
+    Open a native "Save As" file dialog using tkinter.
+
+    tkinter uses its own Tcl/Tk interpreter — no Qt thread conflict.
+    filedialog.asksaveasfilename() blocks the calling thread until the
+    user picks a file or cancels. Returns "" on cancel.
+    """
+    root = _tk.Tk()
+    root.withdraw()
+    root.wm_attributes("-topmost", True)
+    path = _filedialog.asksaveasfilename(
+        title="Save Workspace",
+        defaultextension=".json",
+        initialfile=suggested,
+        filetypes=[("JSON Files", "*.json"), ("All Files", "*.*")],
+    )
+    root.destroy()
+    return path or ""
+
+
+def _native_open_dialog() -> str:
+    """
+    Open a native "Open" file dialog using tkinter.
+    Returns "" on cancel.
+    """
+    root = _tk.Tk()
+    root.withdraw()
+    root.wm_attributes("-topmost", True)
+    path = _filedialog.askopenfilename(
+        title="Load Workspace",
+        filetypes=[("JSON Files", "*.json"), ("All Files", "*.*")],
+    )
+    root.destroy()
+    return path or ""
 
 
 def _wait_for_future(future, timeout_sec: float = 30.0):
@@ -140,6 +181,50 @@ class BlocklyAPI:
                 "success": False,
                 "message": f"Error: {str(e)}",
             }
+
+    def save_workspace(self, json_string: str) -> dict:
+        """
+        Open a native OS "Save As" dialog via zenity/kdialog subprocess and
+        write workspace JSON to the chosen file.
+
+        Called from JS: await window.pywebview.api.save_workspace(jsonString)
+
+        Using subprocess avoids all Qt thread constraints — zenity/kdialog run
+        in their own process, blocking the pywebview bridge thread until the
+        user confirms or cancels.
+        """
+        try:
+            path = _native_save_dialog("workspace.json")
+            if not path:
+                return {"success": False, "error": "Cancelled"}
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(json_string)
+            logger.info(f"Workspace saved to: {path}")
+            return {"success": True, "path": path}
+        except Exception as e:
+            logger.error(f"save_workspace error: {e}")
+            return {"success": False, "error": str(e)}
+
+    def load_workspace(self) -> dict:
+        """
+        Open a native OS "Open" dialog via zenity/kdialog and read the file.
+
+        Called from JS: await window.pywebview.api.load_workspace()
+        """
+        try:
+            path = _native_open_dialog()
+            if not path:
+                return {"success": False, "error": "Cancelled"}
+            with open(path, "r", encoding="utf-8") as f:
+                data = f.read()
+            json.loads(data)  # validate before sending to JS
+            logger.info(f"Workspace loaded from: {path}")
+            return {"success": True, "data": data, "path": path}
+        except json.JSONDecodeError:
+            return {"success": False, "error": "File is not valid JSON"}
+        except Exception as e:
+            logger.error(f"load_workspace error: {e}")
+            return {"success": False, "error": str(e)}
 
 
 def main():

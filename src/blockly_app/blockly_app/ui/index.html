@@ -85,11 +85,76 @@
       height: 16px;
     }
 
+    #workspace-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #tab-bar {
+      display: flex;
+      background: #2d2d2d;
+      border-bottom: 1px solid #404040;
+      flex-shrink: 0;
+      height: 32px;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: #888;
+      cursor: pointer;
+      font-size: 13px;
+      padding: 0 16px;
+      height: 32px;
+    }
+
+    .tab-btn.active {
+      color: #d4d4d4;
+      border-bottom-color: #4caf50;
+    }
+
+    .tab-btn:hover:not(.active) {
+      color: #bbb;
+      background: rgba(255,255,255,0.05);
+    }
+
     #blockly-area {
       flex: 1;
       position: relative;
       overflow: hidden;
     }
+
+    #code-panel {
+      flex: 1;
+      background: #1a1a1a;
+      overflow: auto;
+      padding: 12px;
+    }
+
+    #code-output {
+      margin: 0;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 13px;
+      color: #d4d4d4;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    #btn-export {
+      background: #607d8b;
+      color: white;
+    }
+
+    #btn-import {
+      background: #455a64;
+      color: white;
+    }
+
+    /* SVG flyout label text — not controlled by Blockly theme componentStyles */
+    .blocklyFlyoutLabelText { fill: #cccccc !important; }
 
     #blockly-div {
       position: absolute;
@@ -129,15 +194,27 @@
     <button id="btn-step-into" onclick="stepInto()" disabled>Step Into</button>
     <div class="separator"></div>
     <button id="btn-stop" onclick="stopExecution()" disabled>Stop</button>
+    <div class="separator"></div>
+    <button id="btn-export" onclick="exportWorkspace()">Export</button>
+    <button id="btn-import" onclick="importWorkspace()">Import</button>
     <div id="debug-toggle">
       <input type="checkbox" id="chk-debug" onchange="onDebugToggle(this.checked)">
       <label for="chk-debug">Debug Mode</label>
     </div>
   </div>
 
-  <!-- Blockly Workspace -->
-  <div id="blockly-area">
-    <div id="blockly-div"></div>
+  <!-- Blockly Workspace + Code Tab -->
+  <div id="workspace-area">
+    <div id="tab-bar">
+      <button class="tab-btn active" id="tab-blocks" onclick="switchTab('blocks')">Blocks</button>
+      <button class="tab-btn" id="tab-code" onclick="switchTab('code')">Code</button>
+    </div>
+    <div id="blockly-area">
+      <div id="blockly-div"></div>
+    </div>
+    <div id="code-panel" style="display:none">
+      <pre id="code-output"></pre>
+    </div>
   </div>
 
   <!-- Console Output -->
@@ -169,6 +246,8 @@
   <script src="blockly/core/bridge.js"></script>
   <script src="blockly/core/debug-engine.js"></script>
   <script src="blockly/core/ui-controls.js"></script>
+  <script src="blockly/core/ui-tabs.js"></script>
+  <script src="blockly/core/workspace-io.js"></script>
 
   <!-- Block manifest and loader -->
   <script src="blockly/blocks/manifest.js"></script>
