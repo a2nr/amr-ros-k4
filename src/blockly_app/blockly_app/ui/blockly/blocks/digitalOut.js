@@ -11,7 +11,7 @@ BlockRegistry.register({
       this.appendValueInput('digitalOut')
         .appendField(' gpio:')
         // FieldNumber(default, min, max, step)
-        .appendField(new Blockly.FieldNumbint(er(1, 0, 27, 1), 'GPIO')
+        .appendField(new Blockly.FieldNumber(1, 0, 27, 1), 'GPIO')
         .setCheck('Boolean')
         .appendField(' state:');
 
