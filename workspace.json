@@ -3,17 +3,75 @@
     "languageVersion": 0,
     "blocks": [
       {
-        "type": "controls_if",
-        "id": "WLmpkq!^,rcoKGH+bQgN",
-        "x": 210,
-        "y": 70,
+        "type": "controls_repeat_ext",
+        "id": "j+usYB.X4%o``Le;Q,LA",
+        "x": 190,
+        "y": 150,
         "inputs": {
-          "DO0": {
-            "block": {
-              "type": "led_on",
-              "id": "._%j-2DZ*BZJlyW:1#`Q",
+          "TIMES": {
+            "shadow": {
+              "type": "math_number",
+              "id": "cI`]|Us0+)Ol~XY0L`wE",
               "fields": {
-                "PIN": 1
+                "NUM": 3
+              }
+            }
+          },
+          "DO": {
+            "block": {
+              "type": "digitalOut",
+              "id": "3}G7M%~([nNy9YHlug!|",
+              "fields": {
+                "GPIO": 17
+              },
+              "inputs": {
+                "digitalOut": {
+                  "block": {
+                    "type": "logic_boolean",
+                    "id": "Sw__`~LvxpKyo}./q]1/",
+                    "fields": {
+                      "BOOL": "TRUE"
+                    }
+                  }
+                }
+              },
+              "next": {
+                "block": {
+                  "type": "delay",
+                  "id": "?o-l1IBd(^YR,u[;k$-|",
+                  "fields": {
+                    "DURATION_MS": 500
+                  },
+                  "next": {
+                    "block": {
+                      "type": "digitalOut",
+                      "id": "t}@.X|Ac7F?J;C4v`5ic",
+                      "fields": {
+                        "GPIO": 17
+                      },
+                      "inputs": {
+                        "digitalOut": {
+                          "block": {
+                            "type": "logic_boolean",
+                            "id": "]I]_@v6=ErAYdiolo|+n",
+                            "fields": {
+                              "BOOL": "FALSE"
+                            }
+                          }
+                        }
+                      },
+                      "next": {
+                        "block": {
+                          "type": "delay",
+                          "id": "45BA([9g7/_tItSnUwB-",
+                          "fields": {
+                            "DURATION_MS": 500
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
               }
             }
           }

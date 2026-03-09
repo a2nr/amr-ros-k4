@@ -22,3 +22,6 @@ class DummyHardware(HardwareInterface):
     def is_ready(self) -> bool:
         self.call_log.append("is_ready()")
         return True
+
+    def set_digital_out(self, gpio: int, state: bool) -> None:
+        self.call_log.append(f"set_digital_out(gpio={gpio}, state={state})")

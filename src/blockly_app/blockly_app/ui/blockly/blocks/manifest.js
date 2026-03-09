@@ -9,7 +9,6 @@
 
 // eslint-disable-next-line no-unused-vars
 const BLOCK_FILES = [
-  'led_on.js',
-  'led_off.js',
+  'digitalOut.js',
   'delay.js',
 ];

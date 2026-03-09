@@ -32,3 +32,14 @@ class HardwareInterface(ABC):
             True if hardware is initialized and ready.
         """
         ...
+    
+    @abstractmethod
+    def set_digital_out(self, gpio: int, state: bool) -> None:
+        """
+        Set a GPIO pin to HIGH or LOW.
+
+        Args:
+            gpio: GPIO pin number.
+            state: True for HIGH, False for LOW.
+        """
+        ...

@@ -30,3 +30,9 @@ class GpioHardware(HardwareInterface):
 
     def is_ready(self) -> bool:
         return self._initialized
+    
+    def set_digital_out(self, gpio: int, state: bool) -> None:
+        if not self._initialized:
+            raise RuntimeError("GPIO not available on this platform")
+        self._gpio.setup(gpio, self._gpio.OUT)
+        self._gpio.output(gpio, self._gpio.HIGH if state else self._gpio.LOW)

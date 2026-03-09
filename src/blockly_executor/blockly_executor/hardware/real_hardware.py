@@ -29,3 +29,7 @@ class RealHardware(HardwareInterface):
     def is_ready(self) -> bool:
         # TODO: check if Pi hardware nodes are reachable
         return True
+    
+    def set_digital_out(self, gpio: int, state: bool) -> None:
+        # TODO: publish to Pi hardware node
+        self._logger.info(f"RealHardware.set_digital_out(gpio={gpio}, state={state}) — stub")

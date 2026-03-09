@@ -18,6 +18,8 @@ Feature Task            :   Penjabaran Pekerjaan yang ready untuk dikerjakan. Ta
 
 # Potential Enhancements
 this list is short by priority
+- **Potensial inefective development**: in handlers/hardware use interface.py to all hardware (dummy, ros2, and hardware) class that posibly haavily change.
+- ** UI bug **: stop button not actualy stop execution. tried with long delay with loop and press stop button, program still continue
 - **Launch files**: `blockly_bringup` package with ROS2 launch files to start all nodes with one command
 - **Sensor integration**: Subscriber nodes for sensor data feeding back into Blockly visual feedback
 - **RealHardware implementation**: Fill in ROS2 publishers/service clients for actual Pi hardware nodes (topics TBD)
