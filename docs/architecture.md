@@ -46,16 +46,25 @@
 │                                                                │
 │  ┌─────────────────────┐                                       │
 │  │  HandlerRegistry    │   Extensible command map              │
-│  │  • led_on           │                                       │
-│  │  • led_off          │                                       │
+│  │  • digital_out      │                                       │
+│  │  • digital_in       │                                       │
 │  │  • delay            │                                       │
 │  └──────────┬──────────┘                                       │
 │  ┌──────────▼──────────┐                                       │
-│  │  Hardware Interface │   Abstraction layer                   │
-│  │  • DummyHardware    │   for dev & test                      │
-│  │  • GpioHardware     │   for Raspberry Pi                    │
-│  └─────────────────────┘                                       │
-└────────────────────────────────────────────────────────────────┘
+│  │  Hardware context   │   Unified Hardware class              │
+│  │  • mode="dummy"     │   logging only (dev & test)           │
+│  │  • mode="real"      │   ROS2 pub/sub to gpio_node           │
+│  └──────────┬──────────┘                                       │
+└─────────────┼────────────────────────────────────────────────────┘
+              │  ROS2 Topics: /gpio/write, /gpio/state
+┌─────────────▼────────────────────────────────────────────────────┐
+│             GPIO Node (Raspberry Pi)                             │
+│             gpiod digital I/O                                    │
+│                                                                  │
+│  Subscribes /gpio/write → set pin HIGH/LOW                       │
+│  Publishes  /gpio/state → input pin readings (10 Hz)             │
+│  Falls back to simulation mode if gpiod unavailable              │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ### 2.2 Threading Model
@@ -91,9 +100,9 @@ Defined in [`BlocklyAction.action`](../src/blockly_interfaces/action/BlocklyActi
 
 ```
 # GOAL — one instruction to execute
-string command         # e.g. "led_on", "delay", "move_forward"
-string[] param_keys    # e.g. ["pin"]
-string[] param_values  # e.g. ["3"]
+string command         # e.g. "digital_out", "delay", "digital_in"
+string[] param_keys    # e.g. ["gpio", "state"]
+string[] param_values  # e.g. ["17", "true"]
 ---
 # RESULT — sent after action completes or fails
 bool success
@@ -126,20 +135,20 @@ User presses [Run]
 ② Generated code is wrapped in async function and eval()'d
    (async function() {
      highlightBlock('block_abc123');
-     await executeAction('led_on', { pin: '1' });
+     await executeAction('digital_out', { gpio: '17', state: 'true' });
      highlightBlock('block_def456');
      await executeAction('delay', { duration_ms: '500' });
    })()
        │
        ▼
 ③ executeAction() calls Python via pywebview bridge
-   window.pywebview.api.execute_action("led_on", ["pin"], ["1"])
+   window.pywebview.api.execute_action("digital_out", ["gpio","state"], ["17","true"])
        │
        ▼
 ④ BlocklyAPI.execute_action() builds ROS2 Action Goal
-   goal.command = "led_on"
-   goal.param_keys = ["pin"]
-   goal.param_values = ["1"]
+   goal.command = "digital_out"
+   goal.param_keys = ["gpio", "state"]
+   goal.param_values = ["17", "true"]
        │
        ▼
 ⑤ Action Client sends goal asynchronously
@@ -153,9 +162,9 @@ User presses [Run]
 ⑦ Executor Node receives goal, publishes "executing" feedback
        │
        ▼
-⑧ HandlerRegistry.execute("led_on", {"pin": "1"})
-   → hardware.set_led(1, True)
-   → returns (True, "LED on pin 1 turned ON")
+⑧ HandlerRegistry.execute("digital_out", {"gpio": "17", "state": "true"})
+   → publish GpioWrite(pin=17, state=True) to /gpio/write
+   → returns (True, "GPIO pin 17 set to HIGH")
        │
        ▼
 ⑨ Executor Node calls goal_handle.succeed(), returns Result
@@ -172,11 +181,11 @@ User presses [Run]
 
 ### 8.2 Code Generation Pipeline
 
-Each custom block has a **code generator** defined in its block file (e.g., [`blocks/led_on.js`](../src/blockly_app/blockly_app/ui/blockly/blocks/led_on.js)) that produces JavaScript code. For example, the `led_on` block with pin=3 generates:
+Each custom block has a **code generator** defined in its block file (e.g., [`blocks/digitalOut.js`](../src/blockly_app/blockly_app/ui/blockly/blocks/digitalOut.js)) that produces JavaScript code. For example, the `digitalOut` block with gpio=17 and state=true generates:
 
 ```javascript
 highlightBlock('block_abc123');
-await executeAction('led_on', { pin: '3' });
+await executeAction('digital_out', { gpio: '17', state: 'true' });
 ```
 
 Native Blockly blocks (loops, conditionals, variables) use Blockly's built-in JavaScript generators.
@@ -192,8 +201,8 @@ window = webview.create_window(..., js_api=api)
 This makes all public methods of `BlocklyAPI` callable from JavaScript:
 
 ```javascript
-const result = await window.pywebview.api.execute_action("led_on", ["pin"], ["3"]);
-// result = { success: true, message: "LED on pin 3 turned ON" }
+const result = await window.pywebview.api.execute_action("digital_out", ["gpio","state"], ["17","true"]);
+// result = { success: true, message: "GPIO pin 17 set to HIGH" }
 ```
 
 The call is **synchronous from JavaScript's perspective** — the `await` pauses Blockly's execution until Python returns.

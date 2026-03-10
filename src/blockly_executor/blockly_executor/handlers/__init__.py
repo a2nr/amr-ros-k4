@@ -22,7 +22,7 @@ import pkgutil
 from pathlib import Path
 from typing import Callable
 
-from ..hardware import Hardware
+from .hardware import Hardware
 
 # Global list that collects (command_name, function) pairs during import.
 # Each @handler("name") call appends here. HandlerRegistry.__init__

@@ -8,7 +8,7 @@
 
 | Component | Description |
 |---|---|
-| [`ExecutorNode.__init__()`](blockly_executor/executor_node.py:27) | Creates the Action Server on topic `execute_blockly_action`. Reads ROS2 parameter `use_real_hardware` (bool, default `False`) to select `DummyHardware` or `RealHardware`. |
+| [`ExecutorNode.__init__()`](blockly_executor/executor_node.py:27) | Creates the Action Server on topic `execute_blockly_action`. Reads ROS2 parameter `use_real_hardware` (bool, default `False`) to select Hardware mode (dummy or real). |
 | [`_goal_callback()`](blockly_executor/executor_node.py:47) | Always returns `GoalResponse.ACCEPT` |
 | [`_execute_callback(goal_handle)`](blockly_executor/executor_node.py:57) | Publishes "executing" feedback, calls `HandlerRegistry.execute()`, catches exceptions, always calls `goal_handle.succeed()` |
 | [`main()`](blockly_executor/executor_node.py:117) | Entry point: `rclpy.init()` → `ExecutorNode()` → `rclpy.spin(node)` |
@@ -22,7 +22,8 @@
 ```
 handlers/
 ├── __init__.py     # @handler decorator, auto-discovery, HandlerRegistry
-├── gpio.py         # @handler("led_on"), @handler("led_off")
+├── hardware.py     # Hardware context class (dummy/real mode)
+├── gpio.py         # @handler("digital_out"), @handler("digital_in")
 └── timing.py       # @handler("delay")
 ```
 
@@ -30,12 +31,15 @@ handlers/
 
 ```python
 from . import handler
+from .hardware import Hardware
 
-@handler("led_on")
-def handle_led_on(params: dict[str, str], hardware) -> tuple[bool, str]:
-    pin = int(params["pin"])
-    hardware.set_led(pin, True)
-    return (True, f"LED on pin {pin} turned ON")
+@handler("digital_out")
+def handle_digital_out(params: dict[str, str], hardware: Hardware) -> tuple[bool, str]:
+    gpio = int(params["gpio"])
+    state_raw = str(params["state"]).lower()
+    state = state_raw in ("true", "1", "high")
+    hardware.log(f"set_digital_out(gpio={gpio}, state={state})")
+    return (True, f"GPIO pin {gpio} set to {'HIGH' if state else 'LOW'}")
 ```
 
 **Auto-discovery:** On `HandlerRegistry.__init__`, all `.py` files in `handlers/` are imported automatically. The `@handler` decorator collects `(command, function)` pairs, and the registry binds `hardware` to each function. No manual imports or module lists needed.
@@ -55,29 +59,19 @@ def handle_led_on(params: dict[str, str], hardware) -> tuple[bool, str]:
 |---|---|
 | [`parse_params(keys, values)`](blockly_executor/utils.py:4) | Converts two parallel arrays into a `dict`. Raises `ValueError` if lengths differ. |
 
-#### [`blockly_executor/hardware/interface.py`](blockly_executor/hardware/interface.py) — Hardware Abstract Class
+#### [`blockly_executor/handlers/hardware.py`](blockly_executor/handlers/hardware.py) — Hardware Context
 
-| Method | Description |
-|---|---|
-| [`set_led(pin, state)`](blockly_executor/hardware/interface.py:16) | Abstract. Set LED on/off at given GPIO pin. |
-| [`is_ready()`](blockly_executor/hardware/interface.py:27) | Abstract. Check if hardware is initialized. |
-
-#### [`blockly_executor/hardware/dummy_hardware.py`](blockly_executor/hardware/dummy_hardware.py) — Test/Dev Hardware
-
-In-memory implementation for development and testing. No ROS2 communication, no real hardware.
+Unified `Hardware` class that provides mode-aware context to all handlers. Handlers check `hardware.is_real()` to decide between dummy (logging) and real (ROS2 publish) behavior.
 
 | Attribute/Method | Description |
 |---|---|
-| `led_states: dict[int, bool]` | In-memory LED state storage |
-| `call_log: list[str]` | Log of all method calls for test inspection |
+| `mode: str` | `"dummy"` for testing/dev, `"real"` for actual hardware |
+| `node: Node` | ROS2 Node instance (only available when `mode="real"`) |
+| `call_log: list[str]` | Log of all hardware actions for testing/debugging |
+| `is_real() -> bool` | Returns `True` if running in real hardware mode |
+| `log(message: str)` | Appends message to `call_log` |
 
-#### [`blockly_executor/hardware/real_hardware.py`](blockly_executor/hardware/real_hardware.py) — Real Hardware via ROS2
-
-Communicates with hardware nodes running on the Raspberry Pi via ROS2 topics/services. Requires a `Node` reference to create publishers and service clients. The executor does NOT run on the Pi — it sends commands over the ROS2 network.
-
-| Parameter | Description |
-|---|---|
-| `node: Node` | ROS2 node used to create publishers/clients for Pi hardware nodes |
+In real mode, handlers create ROS2 publishers/subscribers lazily on `hardware.node` to communicate with hardware nodes (e.g. `gpio_node`) running on the Raspberry Pi.
 
 ### 6.3 ROS2 Interfaces — `blockly_interfaces`
 
@@ -101,13 +95,9 @@ Tests are located at [`src/blockly_executor/test/`](test/conftest.py).
 
 See [Section 9.2](#92-conftestpy--shared-fixtures) for detailed explanation.
 
-#### [`test/test_block_led_on.py`](test/test_block_led_on.py)
+#### [`test/test_block_gpio.py`](test/test_block_gpio.py)
 
-Tests for the `led_on` command: happy path (success with valid pin), feedback verification, missing parameter failure, and error message content.
-
-#### [`test/test_block_led_off.py`](test/test_block_led_off.py)
-
-Tests for the `led_off` command with equivalent coverage to `led_on`.
+Tests for `digital_out` and `digital_in` commands: happy path (HIGH/LOW), feedback verification, missing parameter failure, and numeric return value for digital_in.
 
 #### [`test/test_block_delay.py`](test/test_block_delay.py)
 
@@ -135,6 +125,8 @@ Tests for the `delay` command including timing verification (±100ms tolerance).
 | `build` | `colcon build --symlink-install` | `build-interfaces` |
 | `executor` | `source install/setup.bash && ros2 run blockly_executor executor_node` | `build-executor` |
 | `executor-hw` | `... executor_node --ros-args -p use_real_hardware:=true` | `build-executor` |
+| `build-gpio` | `colcon build --symlink-install --packages-select gpio_node` | `build-interfaces` |
+| `gpio-node` | `source install/setup.bash && ros2 run gpio_node gpio_node` | `build-gpio` |
 | `app` | `source install/setup.bash && python -m blockly_app.app` | `build-app` |
 | `test` | `source install/setup.bash && pytest src/blockly_executor/test/ -v` | `build-interfaces` |
 | `setup-ui` | Downloads Blockly via npm and copies to `src/blockly_app/blockly_app/ui/vendor/` | — |
@@ -152,9 +144,9 @@ All tests are **integration tests** that communicate through the real ROS2 Actio
 **Key architectural decisions:**
 
 - **Executor runs as a separate process** — eliminates race conditions from two threads competing for rclpy's global context
-- **`DummyHardware`** isolates physical hardware — tests run on any laptop without a Raspberry Pi
+- **`Hardware(mode="dummy")`** isolates physical hardware — tests run on any laptop without a Raspberry Pi
 - **Real ROS2 nodes** are used during tests — ROS2 code is verified, not just Python logic
-- **One file per block** — all scenarios for `led_on` live in `test_block_led_on.py`
+- **One file per block group** — all GPIO scenarios live in `test_block_gpio.py`
 
 ### 9.2 `conftest.py` — Shared Fixtures
 
@@ -219,10 +211,10 @@ def test_block_<name>_missing_<param>_returns_failure(exe_action):
 pixi run test
 
 # Single file
-pixi run test -- src/blockly_executor/test/test_block_led_on.py -v
+pixi run test -- src/blockly_executor/test/test_block_gpio.py -v
 
 # Single test
-pixi run test -- src/blockly_executor/test/test_block_led_on.py::test_block_led_on_returns_success -v
+pixi run test -- src/blockly_executor/test/test_block_gpio.py::test_digital_out_high -v
 ```
 
 ---

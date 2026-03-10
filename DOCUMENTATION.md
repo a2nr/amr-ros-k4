@@ -16,7 +16,8 @@ See [readme.md](readme.md) for project overview and status.
 | `blockly_app` — file reference | [src/blockly_app/README.md](src/blockly_app/README.md) |
 | `blockly_app` — creating custom blocks (full guide + reference) | [src/blockly_app/BLOCKS.md](src/blockly_app/BLOCKS.md) |
 | `blockly_executor` — file reference, handlers & testing guide | [src/blockly_executor/README.md](src/blockly_executor/README.md) |
-| `blockly_interfaces` — ROS2 action interface | [src/blockly_interfaces/README.md](src/blockly_interfaces/README.md) |
+| `blockly_interfaces` — ROS2 action & message interfaces | [src/blockly_interfaces/README.md](src/blockly_interfaces/README.md) |
+| `gpio_node` — Raspberry Pi GPIO node (gpiod) | [src/gpio_node/gpio_node/gpio_node.py](src/gpio_node/gpio_node/gpio_node.py) |
 
 ---
 

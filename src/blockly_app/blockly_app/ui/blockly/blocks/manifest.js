@@ -10,5 +10,6 @@
 // eslint-disable-next-line no-unused-vars
 const BLOCK_FILES = [
   'digitalOut.js',
+  'digitalIn.js',
   'delay.js',
 ];

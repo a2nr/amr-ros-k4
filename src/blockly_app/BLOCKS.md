@@ -58,8 +58,8 @@ Then add to [`manifest.js`](blockly_app/ui/blockly/blocks/manifest.js):
 
 ```javascript
 const BLOCK_FILES = [
-  'led_on.js',
-  'led_off.js',
+  'digitalOut.js',
+  'digitalIn.js',
   'delay.js',
   'move_forward.js',    // ← add here
 ];
@@ -76,7 +76,7 @@ Each handler contains **both dummy and real hardware logic**. Use `hardware.is_r
 ```python
 # src/blockly_executor/blockly_executor/handlers/movement.py
 from . import handler
-from ..hardware import Hardware
+from .hardware import Hardware
 
 @handler("move_forward")
 def handle_move_forward(params: dict[str, str], hardware: Hardware) -> tuple[bool, str]:
@@ -148,7 +148,7 @@ There are three fundamental block shapes. Choose based on what the block **does*
 
 | Type | Shape | Returns | Use case | Examples |
 |------|-------|---------|----------|---------|
-| **Statement** | Top + bottom notches | Nothing (side effect) | Execute an action on the robot | `led_on`, `led_off`, `delay` |
+| **Statement** | Top + bottom notches | Nothing (side effect) | Execute an action on the robot | `digital_out`, `delay` |
 | **Output** | Left plug, no notches | A value | Read a sensor, compute something | `read_distance`, `read_temperature` |
 | **Container** | Statement input socket | Nothing | Wrap a block stack (loop body, condition body) | Custom `repeat_until_clear` |
 
@@ -491,106 +491,120 @@ await executeAction() resolves → JS continues to next block
 
 ### 7.10 Real Block Examples from This Project
 
-#### `led_on` — Statement block with FieldNumber
+#### `digitalOut` — Statement block with FieldNumber + ValueInput
 
-**JS** ([blocks/led_on.js](blockly_app/ui/blockly/blocks/led_on.js)):
+**JS** ([blocks/digitalOut.js](blockly_app/ui/blockly/blocks/digitalOut.js)):
 ```js
 BlockRegistry.register({
-  name: 'led_on',
+  name: 'digitalOut',
   category: 'Robot',
   categoryColor: '#5b80a5',
   color: '#4CAF50',
-  tooltip: 'Turn on LED at the specified GPIO pin',
+  tooltip: 'set a digital output pin to HIGH (turn on LED)',
 
   definition: {
     init: function () {
-      this.appendDummyInput()
-        .appendField('LED ON  pin')
-        .appendField(new Blockly.FieldNumber(1, 0, 40, 1), 'PIN');
-      //                              ↑       ↑  ↑   ↑
-      //                           default  min max step
+      this.appendValueInput('digitalOut')
+        .appendField(' gpio:')
+        .appendField(new Blockly.FieldNumber(1, 0, 27, 1), 'GPIO')
+        //                              ↑       ↑  ↑   ↑
+        //                           default  min max step
+        .setCheck('Boolean')          // accepts Boolean output blocks
+        .appendField(' state:');
       this.setPreviousStatement(true, null);
       this.setNextStatement(true, null);
       this.setColour('#4CAF50');
-      this.setTooltip('Turn on LED at the specified GPIO pin');
-    },
+      this.setTooltip('set a digital output pin to HIGH (turn on LED)');
+    }
   },
 
   generator: function (block) {
-    const pin = block.getFieldValue('PIN');    // reads the PIN field value
+    const GPIO = block.getFieldValue('GPIO');
+    const STATE = Blockly.JavaScript.valueToCode(
+      block, 'digitalOut', Blockly.JavaScript.ORDER_ATOMIC
+    ) || 'false';
     return (
-      "highlightBlock('" + block.id + "');\n" +           // visual debugger highlight
-      "await executeAction('led_on', { pin: '" + pin + "' });\n"
+      "highlightBlock('" + block.id + "');\n" +
+      "await executeAction('digital_out', { gpio: '" + GPIO + "', state: '" + STATE + "' });\n"
     //                        ↑ command name (must match @handler)
-    //                                          ↑ param key  ↑ param value (always string)
+    //                                          ↑ param keys    ↑ param values (always string)
     );
-  },
+  }
 });
 ```
 
 **Python** ([handlers/gpio.py](../blockly_executor/blockly_executor/handlers/gpio.py)):
 ```python
 from . import handler
-from ..hardware import Hardware
+from .hardware import Hardware
 
-@handler("led_on")                                      # ← must match JS name
-def handle_led_on(params: dict[str, str], hardware: Hardware) -> tuple[bool, str]:
-    pin = int(params["pin"])                            # params values are always strings — cast as needed
-    hardware.log(f"set_led(pin={pin}, state=True)")     # always log for testing
+@handler("digital_out")                                 # ← must match JS name
+def handle_digital_out(params: dict[str, str], hardware: Hardware) -> tuple[bool, str]:
+    gpio = int(params["gpio"])                          # params values are always strings — cast
+    state_raw = str(params["state"]).lower()
+    state = state_raw in ("true", "1", "high")          # explicit string-to-bool parsing
+    state_str = "HIGH" if state else "LOW"
+    hardware.log(f"set_digital_out(gpio={gpio}, state={state})")
 
     if hardware.is_real():
-        # TODO: publish to ROS2 topic for Pi hardware
-        hardware.node.get_logger().info(f"LED on pin {pin} ON")
+        from blockly_interfaces.msg import GpioWrite
+        pub = _get_gpio_write_publisher(hardware)       # lazy publisher creation
+        msg = GpioWrite()
+        msg.pin = gpio
+        msg.state = state
+        pub.publish(msg)                                # publish to /gpio/write → gpio_node
 
-    return (True, f"LED on pin {pin} turned ON")        # (success: bool, message: str)
+    return (True, f"GPIO pin {gpio} set to {state_str}")
 ```
 
 ---
 
-#### `led_off` — Statement block (same pattern, different color)
+#### `digitalIn` — Output block (returns a value)
 
-**JS** ([blocks/led_off.js](blockly_app/ui/blockly/blocks/led_off.js)):
+**JS** ([blocks/digitalIn.js](blockly_app/ui/blockly/blocks/digitalIn.js)):
 ```js
 BlockRegistry.register({
-  name: 'led_off',
+  name: 'digitalIn',
   category: 'Robot',
   categoryColor: '#5b80a5',
-  color: '#FF9800',           // orange — visually distinct from led_on
-  tooltip: 'Turn off LED at the specified GPIO pin',
+  color: '#E91E63',
+  tooltip: 'Read digital input pin state (returns 0 or 1)',
 
   definition: {
     init: function () {
       this.appendDummyInput()
-        .appendField('LED OFF  pin')
-        .appendField(new Blockly.FieldNumber(1, 0, 40, 1), 'PIN');
-      this.setPreviousStatement(true, null);
-      this.setNextStatement(true, null);
-      this.setColour('#FF9800');
-      this.setTooltip('Turn off LED at the specified GPIO pin');
-    },
+        .appendField('Digital Read gpio:')
+        .appendField(new Blockly.FieldNumber(5, 0, 27, 1), 'GPIO');
+      this.setOutput(true, 'Number');   // ← output block, returns Number
+      this.setColour('#E91E63');
+      this.setTooltip('Read digital input pin state (returns 0 or 1)');
+    }
   },
 
   generator: function (block) {
-    const pin = block.getFieldValue('PIN');
-    return (
-      "highlightBlock('" + block.id + "');\n" +
-      "await executeAction('led_off', { pin: '" + pin + "' });\n"
-    );
-  },
+    const gpio = block.getFieldValue('GPIO');
+    const code =
+      "parseFloat((await executeAction('digital_in', { gpio: '" + gpio + "' })).message)";
+    return [code, Blockly.JavaScript.ORDER_AWAIT];
+    //      ↑ returns [code, precedence] for output blocks
+  }
 });
 ```
 
 **Python** ([handlers/gpio.py](../blockly_executor/blockly_executor/handlers/gpio.py)):
 ```python
-@handler("led_off")
-def handle_led_off(params: dict[str, str], hardware: Hardware) -> tuple[bool, str]:
-    pin = int(params["pin"])
-    hardware.log(f"set_led(pin={pin}, state=False)")
+@handler("digital_in")
+def handle_digital_in(params: dict[str, str], hardware: Hardware) -> tuple[bool, str]:
+    gpio = int(params["gpio"])
+    hardware.log(f"read_digital_in(gpio={gpio})")
 
     if hardware.is_real():
-        hardware.node.get_logger().info(f"LED on pin {pin} OFF")
+        cache = _get_gpio_state_subscriber(hardware)    # lazy subscriber + cache
+        with hardware.node._gpio_state_lock:
+            state = cache.get(gpio)
+        return (True, "1" if state else "0")
 
-    return (True, f"LED on pin {pin} turned OFF")
+    return (True, "0")                                  # dummy mode — always LOW
 ```
 
 > Multiple handlers can live in the same `.py` file — they are auto-discovered by `pkgutil.iter_modules`.
@@ -635,7 +649,7 @@ BlockRegistry.register({
 ```python
 import time
 from . import handler
-from ..hardware import Hardware
+from .hardware import Hardware
 
 @handler("delay")
 def handle_delay(params: dict[str, str], hardware: Hardware) -> tuple[bool, str]:
@@ -689,7 +703,7 @@ Corresponding Python handler:
 ```python
 # src/blockly_executor/blockly_executor/handlers/MY_FILE.py
 from . import handler
-from ..hardware import Hardware
+from .hardware import Hardware
 
 @handler("MY_COMMAND")
 def handle_my_command(params: dict[str, str], hardware: Hardware) -> tuple[bool, str]:
@@ -707,8 +721,8 @@ def handle_my_command(params: dict[str, str], hardware: Hardware) -> tuple[bool,
 After creating both files, add the JS filename to [manifest.js](blockly_app/ui/blockly/blocks/manifest.js):
 ```js
 const BLOCK_FILES = [
-  'led_on.js',
-  'led_off.js',
+  'digitalOut.js',
+  'digitalIn.js',
   'delay.js',
   'MY_BLOCK.js',    // ← add here
 ];
@@ -953,8 +967,8 @@ All field values retrieved via `block.getFieldValue('FIELD_NAME')` are **strings
 
 | Item | Convention | Example |
 |------|-----------|---------|
-| Block `name` / `@handler` string | `snake_case` | `led_on`, `read_distance`, `move_to` |
-| JS file | `<name>.js` or `camelCase.js` | `led_on.js`, `digitalOut.js` |
+| Block `name` / `@handler` string | `snake_case` | `digital_out`, `read_distance`, `move_to` |
+| JS file | `<name>.js` or `camelCase.js` | `digitalOut.js`, `digitalIn.js` |
 | Python handler file | `<topic>.py` (group related handlers) | `gpio.py`, `timing.py`, `motors.py` |
 | Field key in `getFieldValue` | `UPPER_SNAKE` | `'PIN'`, `'DURATION_MS'`, `'SENSOR_ID'` |
 | param key in `executeAction` | `snake_case` | `{ pin: '3' }`, `{ duration_ms: '500' }` |
@@ -974,7 +988,7 @@ All field values retrieved via `block.getFieldValue('FIELD_NAME')` are **strings
 
 3. Create  src/blockly_executor/…/handlers/<name>.py  (or add to existing file)
            └─ from . import handler
-           └─ from ..hardware import Hardware
+           └─ from .hardware import Hardware
            └─ @handler("name")
            └─ def handle_name(params, hardware: Hardware): ...  →  return (bool, str)
            └─ hardware.log(...) for testing + hardware.is_real() for real logic

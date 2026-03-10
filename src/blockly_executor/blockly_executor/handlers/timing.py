@@ -3,7 +3,7 @@
 import time
 
 from . import handler
-from ..hardware import Hardware
+from .hardware import Hardware
 
 
 @handler("delay")

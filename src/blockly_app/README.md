@@ -91,10 +91,10 @@ Both functions use `async/await` — they return after the file dialog closes an
 **Purpose:** Lists all block files to auto-load. This is the **only file you edit** when adding a new block (besides creating the block file itself).
 
 ```js
-const BLOCK_FILES = ['led_on.js', 'led_off.js', 'delay.js'];
+const BLOCK_FILES = ['digitalOut.js', 'digitalIn.js', 'delay.js'];
 ```
 
-#### [`blockly_app/ui/blockly/blocks/led_on.js`](blockly_app/ui/blockly/blocks/led_on.js) — Example Block
+#### [`blockly_app/ui/blockly/blocks/digitalOut.js`](blockly_app/ui/blockly/blocks/digitalOut.js) — Example Block
 
 **Purpose:** Self-contained block definition. Contains both the visual appearance AND the code generator.
 

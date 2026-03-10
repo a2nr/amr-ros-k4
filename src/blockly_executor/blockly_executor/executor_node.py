@@ -6,7 +6,7 @@ from rclpy.action.server import ServerGoalHandle
 from rclpy.node import Node
 
 from .handlers import HandlerRegistry
-from .hardware import Hardware
+from .handlers.hardware import Hardware
 from .utils import parse_params
 
 # Import will work after colcon build of interfaces package.

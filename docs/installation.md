@@ -14,8 +14,11 @@ amr-ros-k4/                                    # ROS2 Workspace root
     ├── blockly_interfaces/                     # ROS2 custom interface package (ament_cmake)
     │   ├── package.xml
     │   ├── CMakeLists.txt
-    │   └── action/
-    │       └── BlocklyAction.action            # Single action for all instructions
+    │   ├── action/
+    │   │   └── BlocklyAction.action            # Single action for all instructions
+    │   └── msg/
+    │       ├── GpioWrite.msg                   # Digital output command (pin + state)
+    │       └── GpioRead.msg                    # Digital input state (pin + state)
     │
     ├── blockly_executor/                       # ROS2 Executor Node package (ament_python)
     │   ├── package.xml
@@ -27,21 +30,24 @@ amr-ros-k4/                                    # ROS2 Workspace root
     │   │   ├── executor_node.py                # ROS2 Action Server (thin wrapper)
     │   │   ├── handlers/                       # @handler decorator + auto-discovery
     │   │   │   ├── __init__.py                 # HandlerRegistry, @handler, auto-discover
-    │   │   │   ├── gpio.py                     # @handler("led_on"), @handler("led_off")
+    │   │   │   ├── hardware.py                 # Hardware context (dummy/real mode)
+    │   │   │   ├── gpio.py                     # @handler("digital_out"), @handler("digital_in")
     │   │   │   └── timing.py                   # @handler("delay")
-    │   │   ├── utils.py                        # parse_params and helpers
-    │   │   └── hardware/
-    │   │       ├── __init__.py
-    │   │       ├── interface.py                # HardwareInterface abstract class
-    │   │       ├── dummy_hardware.py           # In-memory impl for dev & test
-    │   │       ├── real_hardware.py            # ROS2 topics/services to Pi nodes
-    │   │       └── gpio_hardware.py            # Direct RPi.GPIO (legacy)
+    │   │   └── utils.py                        # parse_params and helpers
     │   └── test/                               # Integration test suite
     │       ├── __init__.py
     │       ├── conftest.py                     # Shared fixtures: ros_context, exe_action
-    │       ├── test_block_led_on.py
-    │       ├── test_block_led_off.py
+    │       ├── test_block_gpio.py              # digital_out + digital_in tests
     │       └── test_block_delay.py
+    │
+    ├── gpio_node/                              # ROS2 GPIO node for Raspberry Pi (ament_python)
+    │   ├── package.xml
+    │   ├── setup.py
+    │   ├── setup.cfg
+    │   ├── resource/gpio_node                  # Ament index marker
+    │   └── gpio_node/                          # Python module
+    │       ├── __init__.py
+    │       └── gpio_node.py                    # ROS2 node: gpiod digital I/O
     │
     └── blockly_app/                            # pywebview desktop application (ament_python)
         ├── package.xml
@@ -69,8 +75,8 @@ amr-ros-k4/                                    # ROS2 Workspace root
                     │   └── workspace-io.js     # exportWorkspace(), importWorkspace()
                     ├── blocks/                 # One file per block (auto-discovered)
                     │   ├── manifest.js         # BLOCK_FILES array
-                    │   ├── led_on.js
-                    │   ├── led_off.js
+                    │   ├── digitalOut.js       # Digital output (GPIO HIGH/LOW)
+                    │   ├── digitalIn.js        # Digital input (read pin state)
                     │   └── delay.js
                     ├── loader.js               # Dynamic script loader from manifest
                     └── workspace-init.js        # Auto-toolbox + workspace setup
@@ -151,7 +157,19 @@ pixi run executor
 pixi run executor-hw
 ```
 
-The executor does NOT run on the Raspberry Pi directly. In real hardware mode, `RealHardware` creates ROS2 publishers/service clients that talk to hardware nodes running on the Pi.
+The executor does NOT run on the Raspberry Pi directly. In real hardware mode, handlers create ROS2 publishers/subscribers that communicate with hardware nodes (e.g. `gpio_node`) running on the Pi.
+
+### 5.3 Running the GPIO Node (Raspberry Pi)
+
+```bash
+# On Raspberry Pi: start GPIO node with default pin configuration
+pixi run gpio-node
+
+# Custom pins via ROS2 parameters
+pixi run gpio-node -- --ros-args -p output_pins:=[17,27] -p input_pins:=[5,6]
+```
+
+The GPIO node requires `gpiod` (auto-installed on `linux-aarch64`). On x86 dev machines it runs in simulation mode (log only).
 
 The executor logs all received goals and their results to the terminal.
 
@@ -167,10 +185,10 @@ pixi run executor
 pixi run test
 
 # Run a specific test file
-pixi run test -- src/blockly_executor/test/test_block_led_on.py -v
+pixi run test -- src/blockly_executor/test/test_block_gpio.py -v
 
 # Run a single test function
-pixi run test -- src/blockly_executor/test/test_block_led_on.py::test_block_led_on_returns_success -v
+pixi run test -- src/blockly_executor/test/test_block_gpio.py::test_digital_out_high -v
 ```
 
 If the executor is not running, tests are **skipped** with an informative message rather than failing with a cryptic timeout error.
