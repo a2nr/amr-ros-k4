@@ -6,8 +6,7 @@ from rclpy.action.server import ServerGoalHandle
 from rclpy.node import Node
 
 from .handlers import HandlerRegistry
-from .hardware.dummy_hardware import DummyHardware
-from .hardware.real_hardware import RealHardware
+from .hardware import Hardware
 from .utils import parse_params
 
 # Import will work after colcon build of interfaces package.
@@ -27,14 +26,18 @@ class ExecutorNode(Node):
     def __init__(self) -> None:
         super().__init__("blockly_executor_node")
 
+        hardware_mode = self.declare_parameter("hardware_mode", "dummy").value
         use_real = self.declare_parameter("use_real_hardware", False).value
 
-        if use_real:
-            hardware = RealHardware(self)
-            self.get_logger().info("Using RealHardware (ROS2 topics/services to Pi)")
-        else:
-            hardware = DummyHardware()
-            self.get_logger().info("Using DummyHardware (no real hardware)")
+        # Backward compat: use_real_hardware=true overrides hardware_mode
+        if hardware_mode == "dummy" and use_real:
+            hardware_mode = "real"
+
+        hardware = Hardware(
+            mode=hardware_mode,
+            node=self if hardware_mode == "real" else None,
+        )
+        self.get_logger().info(f"Using Hardware(mode='{hardware_mode}')")
 
         self._registry = HandlerRegistry(hardware)
 

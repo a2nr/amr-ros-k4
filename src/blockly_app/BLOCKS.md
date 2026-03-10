@@ -71,17 +71,26 @@ const BLOCK_FILES = [
 
 Create a new file in `handlers/` or add to an existing one. Use the `@handler` decorator — auto-discovery handles the rest.
 
+Each handler contains **both dummy and real hardware logic**. Use `hardware.is_real()` to branch, and `hardware.log()` to record actions for testing.
+
 ```python
 # src/blockly_executor/blockly_executor/handlers/movement.py
 from . import handler
+from ..hardware import Hardware
 
 @handler("move_forward")
-def handle_move_forward(params: dict[str, str], hardware) -> tuple[bool, str]:
+def handle_move_forward(params: dict[str, str], hardware: Hardware) -> tuple[bool, str]:
     speed = int(params["speed"])
     duration_ms = int(params["duration_ms"])
     if not (0 <= speed <= 100):
         raise ValueError(f"speed must be 0-100, got: {speed}")
-    hardware.move(direction="forward", speed=speed, duration_ms=duration_ms)
+    hardware.log(f"move_forward(speed={speed}, duration_ms={duration_ms})")
+
+    if hardware.is_real():
+        # Real hardware — lazy import, publish to ROS2 topic
+        # TODO: hardware.node.create_publisher(...) etc.
+        hardware.node.get_logger().info(f"Moving forward at {speed} for {duration_ms}ms")
+
     return (True, f"Moved forward at speed {speed} for {duration_ms}ms")
 ```
 
@@ -467,7 +476,8 @@ ExecutorNode receives goal, calls HandlerRegistry.execute(command, params)
         │
         ▼
 @handler("my_command") function(params, hardware)
-  → hardware.set_led(pin, True)   ← DummyHardware or RealHardware
+  → hardware.log(...)             ← always logged for testing
+  → if hardware.is_real(): ...    ← real hardware (ROS2 publish/GPIO)
         │
         ▼
 Returns (True, "LED on pin 3 turned ON")
@@ -521,11 +531,17 @@ BlockRegistry.register({
 **Python** ([handlers/gpio.py](../blockly_executor/blockly_executor/handlers/gpio.py)):
 ```python
 from . import handler
+from ..hardware import Hardware
 
 @handler("led_on")                                      # ← must match JS name
-def handle_led_on(params: dict[str, str], hardware) -> tuple[bool, str]:
+def handle_led_on(params: dict[str, str], hardware: Hardware) -> tuple[bool, str]:
     pin = int(params["pin"])                            # params values are always strings — cast as needed
-    hardware.set_led(pin, True)
+    hardware.log(f"set_led(pin={pin}, state=True)")     # always log for testing
+
+    if hardware.is_real():
+        # TODO: publish to ROS2 topic for Pi hardware
+        hardware.node.get_logger().info(f"LED on pin {pin} ON")
+
     return (True, f"LED on pin {pin} turned ON")        # (success: bool, message: str)
 ```
 
@@ -567,9 +583,13 @@ BlockRegistry.register({
 **Python** ([handlers/gpio.py](../blockly_executor/blockly_executor/handlers/gpio.py)):
 ```python
 @handler("led_off")
-def handle_led_off(params: dict[str, str], hardware) -> tuple[bool, str]:
+def handle_led_off(params: dict[str, str], hardware: Hardware) -> tuple[bool, str]:
     pin = int(params["pin"])
-    hardware.set_led(pin, False)
+    hardware.log(f"set_led(pin={pin}, state=False)")
+
+    if hardware.is_real():
+        hardware.node.get_logger().info(f"LED on pin {pin} OFF")
+
     return (True, f"LED on pin {pin} turned OFF")
 ```
 
@@ -615,9 +635,10 @@ BlockRegistry.register({
 ```python
 import time
 from . import handler
+from ..hardware import Hardware
 
 @handler("delay")
-def handle_delay(params: dict[str, str], hardware) -> tuple[bool, str]:
+def handle_delay(params: dict[str, str], hardware: Hardware) -> tuple[bool, str]:
     duration_ms = int(params["duration_ms"])
     time.sleep(duration_ms / 1000.0)
     return (True, f"Delayed {duration_ms}ms")
@@ -668,11 +689,18 @@ Corresponding Python handler:
 ```python
 # src/blockly_executor/blockly_executor/handlers/MY_FILE.py
 from . import handler
+from ..hardware import Hardware
 
 @handler("MY_COMMAND")
-def handle_my_command(params: dict[str, str], hardware) -> tuple[bool, str]:
+def handle_my_command(params: dict[str, str], hardware: Hardware) -> tuple[bool, str]:
     param1 = params["param1"]          # always str — cast as needed (int, float, etc.)
-    # ... do something with hardware ...
+    hardware.log(f"my_command(param1={param1})")
+
+    if hardware.is_real():
+        # Real hardware logic — ROS2 publish, GPIO, etc.
+        # Use lazy imports here for dependencies not available in dev
+        hardware.node.get_logger().info(f"my_command: {param1}")
+
     return (True, f"Done: {param1}")
 ```
 
@@ -733,9 +761,16 @@ BlockRegistry.register({
 Python handler:
 ```python
 @handler("read_distance")
-def handle_read_distance(params: dict[str, str], hardware) -> tuple[bool, str]:
+def handle_read_distance(params: dict[str, str], hardware: Hardware) -> tuple[bool, str]:
     sensor_id = params["sensor_id"]
-    distance = hardware.read_distance(sensor_id)    # returns float in cm
+    hardware.log(f"read_distance(sensor_id={sensor_id})")
+
+    if hardware.is_real():
+        # TODO: subscribe to sensor topic, return actual reading
+        distance = 0.0  # placeholder
+    else:
+        distance = 42.0  # dummy test value
+
     return (True, str(distance))   # message becomes the expression value in JS
 ```
 
@@ -790,10 +825,15 @@ BlockRegistry.register({
 Python handler:
 ```python
 @handler("move_to")
-def handle_move_to(params: dict[str, str], hardware) -> tuple[bool, str]:
+def handle_move_to(params: dict[str, str], hardware: Hardware) -> tuple[bool, str]:
     x = float(params["x"])
     y = float(params["y"])
-    hardware.move_to(x, y)
+    hardware.log(f"move_to(x={x}, y={y})")
+
+    if hardware.is_real():
+        # TODO: publish to cmd_vel or navigation topic
+        hardware.node.get_logger().info(f"Moving to ({x}, {y})")
+
     return (True, f"Moved to ({x}, {y})")
 ```
 
@@ -934,8 +974,10 @@ All field values retrieved via `block.getFieldValue('FIELD_NAME')` are **strings
 
 3. Create  src/blockly_executor/…/handlers/<name>.py  (or add to existing file)
            └─ from . import handler
+           └─ from ..hardware import Hardware
            └─ @handler("name")
-           └─ def handle_name(params, hardware): ...  →  return (bool, str)
+           └─ def handle_name(params, hardware: Hardware): ...  →  return (bool, str)
+           └─ hardware.log(...) for testing + hardware.is_real() for real logic
 
 4. Test    pixi run executor   (Terminal 1)
            pixi run app        (Terminal 2) — drag block, click Run

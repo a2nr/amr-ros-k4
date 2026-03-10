@@ -64,7 +64,12 @@ def _native_open_dialog() -> str:
     return path or ""
 
 
-def _wait_for_future(future, timeout_sec: float = 30.0):
+class _CancelledError(Exception):
+    """Raised when a wait is cancelled via cancel_event."""
+    pass
+
+
+def _wait_for_future(future, timeout_sec: float = 30.0, cancel_event=None):
     """
     Wait for an rclpy Future to complete without calling spin.
 
@@ -72,10 +77,13 @@ def _wait_for_future(future, timeout_sec: float = 30.0):
     will be resolved by that thread's spin loop. This function simply
     polls future.done() with a small sleep to avoid busy-waiting.
 
+    If cancel_event is provided and gets set, raises _CancelledError.
     Raises TimeoutError if the future doesn't complete within timeout.
     """
     deadline = time.monotonic() + timeout_sec
     while not future.done():
+        if cancel_event is not None and cancel_event.is_set():
+            raise _CancelledError("Cancelled by user")
         if time.monotonic() > deadline:
             raise TimeoutError(
                 f"Future did not complete within {timeout_sec}s"
@@ -98,6 +106,7 @@ class BlocklyAPI:
     def __init__(self, ros_node: Node, action_client: ActionClient) -> None:
         self._node = ros_node
         self._client = action_client
+        self._cancel_event = threading.Event()
 
     def execute_action(
         self,
@@ -144,13 +153,19 @@ class BlocklyAPI:
                 "message": "Action server not available (timeout 5s)",
             }
 
+        # Clear cancel state for this new action
+        self._cancel_event.clear()
+
         # Send goal and wait for result
         try:
             send_future = self._client.send_goal_async(goal)
 
             # Wait for goal acceptance — the background spin thread
             # processes callbacks that resolve this future.
-            goal_handle = _wait_for_future(send_future, timeout_sec=10.0)
+            goal_handle = _wait_for_future(
+                send_future, timeout_sec=10.0,
+                cancel_event=self._cancel_event,
+            )
 
             if not goal_handle.accepted:
                 return {
@@ -160,12 +175,22 @@ class BlocklyAPI:
 
             # Wait for result
             result_future = goal_handle.get_result_async()
-            wrapped = _wait_for_future(result_future, timeout_sec=30.0)
+            wrapped = _wait_for_future(
+                result_future, timeout_sec=30.0,
+                cancel_event=self._cancel_event,
+            )
             result = wrapped.result
 
             return {
                 "success": result.success,
                 "message": result.message,
+            }
+
+        except _CancelledError:
+            logger.info("Action cancelled by user")
+            return {
+                "success": False,
+                "message": "Cancelled by user",
             }
 
         except TimeoutError as e:
@@ -181,6 +206,17 @@ class BlocklyAPI:
                 "success": False,
                 "message": f"Error: {str(e)}",
             }
+
+    def cancel_action(self) -> dict:
+        """
+        Cancel the currently running action.
+
+        Called from JS via cancelCurrentAction() in bridge.js.
+        Sets the cancel event so _wait_for_future() returns early.
+        """
+        logger.info("cancel_action: cancel requested from JS")
+        self._cancel_event.set()
+        return {"success": True, "message": "Cancel requested"}
 
     def save_workspace(self, json_string: str) -> dict:
         """

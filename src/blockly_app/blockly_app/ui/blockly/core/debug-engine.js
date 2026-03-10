@@ -226,6 +226,9 @@ function stopExecution() {
   debugState.stopRequested = true;
   debugState.isPaused = false;
 
+  // Cancel any in-flight executeAction() call (JS + Python side)
+  cancelCurrentAction();
+
   // If paused, resolve to allow the throw to propagate
   if (debugResolve) {
     debugResolve();

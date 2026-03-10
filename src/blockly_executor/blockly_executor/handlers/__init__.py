@@ -22,7 +22,7 @@ import pkgutil
 from pathlib import Path
 from typing import Callable
 
-from ..hardware.interface import HardwareInterface
+from ..hardware import Hardware
 
 # Global list that collects (command_name, function) pairs during import.
 # Each @handler("name") call appends here. HandlerRegistry.__init__
@@ -60,7 +60,7 @@ class HandlerRegistry:
     the hardware interface to each registered handler.
     """
 
-    def __init__(self, hardware: HardwareInterface) -> None:
+    def __init__(self, hardware: Hardware) -> None:
         self._hardware = hardware
         self._handlers: dict[str, Callable[[dict[str, str]], tuple[bool, str]]] = {}
 
