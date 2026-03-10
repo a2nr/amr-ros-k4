@@ -57,8 +57,21 @@ class GpioNode(Node):
         self._output_lines: dict[int, object] = {}
         self._input_lines: dict[int, object] = {}
 
+        # Instance flag — True hanya jika gpiod tersedia DAN chip berhasil dibuka.
+        # Berbeda dari module-level HAS_GPIOD yang hanya cek import.
+        self._has_hardware = False
+
         if HAS_GPIOD:
-            self._setup_gpio(chip_name)
+            try:
+                self._setup_gpio(chip_name)
+                self._has_hardware = True
+            except (FileNotFoundError, PermissionError, OSError) as e:
+                # gpiod terinstall tapi GPIO chip tidak ada (dev machine x86)
+                # atau permission denied — fallback ke simulation mode
+                self.get_logger().warn(
+                    f"gpiod available but cannot open {chip_name}: {e} "
+                    "— running in simulation mode"
+                )
         else:
             self.get_logger().warn(
                 "gpiod not available — running in simulation mode (log only)"
@@ -82,7 +95,7 @@ class GpioNode(Node):
         self.get_logger().info(
             f"GpioNode ready — outputs={list(self._output_pins)}, "
             f"inputs={list(self._input_pins)}, "
-            f"gpiod={'yes' if HAS_GPIOD else 'no (simulation)'}"
+            f"gpiod={'yes' if self._has_hardware else 'no (simulation)'}"
         )
 
     def _setup_gpio(self, chip_name: str) -> None:
@@ -116,13 +129,13 @@ class GpioNode(Node):
         state = msg.state
         state_str = "HIGH" if state else "LOW"
 
-        if pin not in self._output_lines and HAS_GPIOD:
+        if pin not in self._output_lines and self._has_hardware:
             self.get_logger().warn(
                 f"Pin {pin} not configured as output — ignoring write"
             )
             return
 
-        if HAS_GPIOD:
+        if self._has_hardware:
             self._output_lines[pin].set_value(1 if state else 0)
 
         self.get_logger().info(f"GPIO write: pin={pin} state={state_str}")
@@ -138,7 +151,7 @@ class GpioNode(Node):
             msg = GpioRead()
             msg.pin = pin
 
-            if HAS_GPIOD:
+            if self._has_hardware:
                 msg.state = bool(line.get_value())
             else:
                 msg.state = False  # simulation: selalu LOW
@@ -152,13 +165,14 @@ class GpioNode(Node):
         oleh proses lain tanpa reboot. Jika tidak di-release, gpiod
         akan menandai pin sebagai "busy".
         """
-        for line in self._output_lines.values():
-            line.release()
-        for line in self._input_lines.values():
-            line.release()
-        if self._chip is not None:
-            self._chip.close()
-        self.get_logger().info("GPIO lines released")
+        if self._has_hardware:
+            for line in self._output_lines.values():
+                line.release()
+            for line in self._input_lines.values():
+                line.release()
+            if self._chip is not None:
+                self._chip.close()
+            self.get_logger().info("GPIO lines released")
         super().destroy_node()
 
 
