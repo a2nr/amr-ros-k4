@@ -38,7 +38,7 @@ class GpioNode(Node):
         self.declare_parameter("output_pins", [17, 27, 22])
         self.declare_parameter("input_pins", [5, 6, 13])
         self.declare_parameter("input_publish_rate", 10.0)  # Hz
-        self.declare_parameter("gpio_chip", "gpiochip0")  # default chip untuk Pi
+        self.declare_parameter("gpio_chip", "/dev/gpiochip0")  # gpiod v2.x butuh path lengkap
 
         self._output_pins = (
             self.get_parameter("output_pins").get_parameter_value().integer_array_value
