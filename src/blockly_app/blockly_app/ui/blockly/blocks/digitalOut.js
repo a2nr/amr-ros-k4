@@ -27,7 +27,7 @@ BlockRegistry.register({
     const STATE = Blockly.JavaScript.valueToCode(block, 'digitalOut', Blockly.JavaScript.ORDER_ATOMIC) || 'false';
     return (
       'highlightBlock(\'' + block.id + '\');\n' +
-      'await executeAction(\'digital_out\', { gpio: \'' + GPIO + '\', state: \'' + STATE + '\' });\n'
+      'await executeAction(\'digital_out\', { gpio: \'' + GPIO + '\', state: String(' + STATE + ') });\n'
     );
   }
 });

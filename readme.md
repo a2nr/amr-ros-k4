@@ -36,11 +36,9 @@ jelaskan apa yang dimaksut untuk menyelesaikan task
 
 # Potential Enhancements
 this list is short by priority
-- **Implement function and main function block in blockly**: we need that.
 - **ROS Feature in generated block blocky**: currently, block blocky only generate action client, and there is sub/pub and other ROS feature need to implement to get/set value to node.
 - **Launch files**: `blockly_bringup` package with ROS2 launch files to start all nodes with one command
 - **Sensor integration**: Subscriber nodes for sensor data feeding back into Blockly visual feedback
-- **RealHardware implementation**: Fill in remaining ROS2 publishers/service clients for Pi hardware nodes (GPIO done via `gpio_node`, motor/servo TBD)
 - **ROS2 lifecycle nodes**: Migrate executor and controller to lifecycle nodes for managed state transitions
 - **Simulation**: Integrate with Gazebo/Isaac Sim for testing Kiwi Wheel kinematics before deploying to hardware
 - **Block categories**: Future blocks grouped into Robot, Sensors, Navigation categories
@@ -60,3 +58,24 @@ Membuat ROS2 node (`gpio_node`) yang berjalan di Raspberry Pi untuk mengontrol p
 - Dependency `gpiod` ditambahkan untuk `linux-aarch64`
 - Integration test `test_block_gpio.py` mencakup digital_out dan digital_in
 - `pixi run build` berhasil tanpa error
+
+## 2 Function & Main Program Block in Blockly : [x]
+Saat ini Blockly workspace hanya mendukung linear execution — semua top-level blocks dijalankan berurutan tanpa entry point yang jelas. Belum ada cara untuk mendefinisikan reusable functions. Enhancement ini menambahkan:
+1. **Function blocks** — menggunakan built-in Blockly procedure blocks (`procedures_defnoreturn`, `procedures_defreturn`, `procedures_callnoreturn`, `procedures_callreturn`) dengan override code generator untuk menghasilkan `async function` + `await` calls agar kompatibel dengan `executeAction()`.
+2. **Main Program block** — custom hat block sebagai entry point program. Ketika ada Main Program block, hanya function definitions + main block body yang di-execute (orphan blocks diabaikan). Tanpa Main Program block, behavior tetap backward compatible.
+
+Perubahan ini murni di sisi JS/frontend. Tidak ada perubahan di Python side (executor, handlers, action interface).
+
+### Definition Of Done
+- File `async-procedures.js` dibuat di `blockly/core/` — override procedure generators ke async/await + fungsi `generateCode(ws)`
+- File `mainProgram.js` dibuat di `blockly/blocks/` — Main Program hat block (no top/bottom connector, statement input BODY)
+- Category "Functions" muncul di toolbox (menggunakan `custom: 'PROCEDURE'`)
+- Category "Program" muncul di toolbox dengan Main Program block
+- Hanya satu Main Program block diperbolehkan per workspace (enforced via change listener)
+- `debug-engine.js`, `ui-tabs.js` menggunakan `generateCode()` sebagai pengganti `workspaceToCode()`
+- Tanpa Main block: blocks lama tetap berjalan normal (backward compatible)
+- Dengan Main block: hanya function definitions + main block body yang di-execute
+- Code tab menampilkan generated code yang sesuai (async functions + main body)
+- Debug mode (breakpoints, step over/into) bekerja di dalam function calls
+- Export/Import workspace dengan main block & functions bisa di-save dan di-load
+- `pixi run build-app` berhasil tanpa error

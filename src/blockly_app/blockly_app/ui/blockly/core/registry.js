@@ -127,6 +127,12 @@ const BlockRegistry = (() => {
         name: 'Variables',
         colour: '#a55b80',
         custom: 'VARIABLE',
+      },
+      {
+        kind: 'category',
+        name: 'Functions',
+        colour: '#995ba5',
+        custom: 'PROCEDURE',
       }
     );
 

@@ -38,7 +38,7 @@ function highlightBlock(blockId) {
  * No step-by-step control — just run everything as fast as possible.
  */
 async function runProgram() {
-  const code = javascript.javascriptGenerator.workspaceToCode(workspace);
+  const code = generateCode(workspace);
 
   if (!code.trim()) {
     consoleLog('No blocks to execute', 'error');
@@ -79,7 +79,7 @@ async function runProgram() {
  * Pauses at breakpoints and supports Step Over/Step Into.
  */
 async function runDebug() {
-  const code = javascript.javascriptGenerator.workspaceToCode(workspace);
+  const code = generateCode(workspace);
 
   if (!code.trim()) {
     consoleLog('No blocks to execute', 'error');

@@ -3,70 +3,66 @@
     "languageVersion": 0,
     "blocks": [
       {
-        "type": "controls_repeat_ext",
-        "id": "j+usYB.X4%o``Le;Q,LA",
-        "x": 190,
-        "y": 150,
+        "type": "main_program",
+        "id": "COLVqmFP{j*XNMc.9rz+",
+        "x": 210,
+        "y": 190,
         "inputs": {
-          "TIMES": {
-            "shadow": {
-              "type": "math_number",
-              "id": "cI`]|Us0+)Ol~XY0L`wE",
-              "fields": {
-                "NUM": 3
-              }
-            }
-          },
-          "DO": {
+          "BODY": {
             "block": {
-              "type": "digitalOut",
-              "id": "3}G7M%~([nNy9YHlug!|",
+              "type": "controls_whileUntil",
+              "id": "UZH|b`4F=4X`zYjNW9zL",
               "fields": {
-                "GPIO": 17
+                "MODE": "WHILE"
               },
               "inputs": {
-                "digitalOut": {
+                "BOOL": {
                   "block": {
                     "type": "logic_boolean",
-                    "id": "Sw__`~LvxpKyo}./q]1/",
+                    "id": "nsD(~e:hYj[+9m-)yu-4",
                     "fields": {
                       "BOOL": "TRUE"
                     }
                   }
-                }
-              },
-              "next": {
-                "block": {
-                  "type": "delay",
-                  "id": "?o-l1IBd(^YR,u[;k$-|",
-                  "fields": {
-                    "DURATION_MS": 500
-                  },
-                  "next": {
-                    "block": {
-                      "type": "digitalOut",
-                      "id": "t}@.X|Ac7F?J;C4v`5ic",
-                      "fields": {
-                        "GPIO": 17
-                      },
-                      "inputs": {
-                        "digitalOut": {
-                          "block": {
-                            "type": "logic_boolean",
-                            "id": "]I]_@v6=ErAYdiolo|+n",
-                            "fields": {
-                              "BOOL": "FALSE"
+                },
+                "DO": {
+                  "block": {
+                    "type": "digitalOut",
+                    "id": "Cz1MB5`}~cPRiZhh$/P9",
+                    "fields": {
+                      "GPIO": 17
+                    },
+                    "inputs": {
+                      "digitalOut": {
+                        "block": {
+                          "type": "procedures_callreturn",
+                          "id": "U|7!ynVp5Z.nwD_`4=Z,",
+                          "extraState": {
+                            "name": "foo",
+                            "params": [
+                              "logic"
+                            ]
+                          },
+                          "inputs": {
+                            "ARG0": {
+                              "block": {
+                                "type": "logic_boolean",
+                                "id": "HXRaHRaPE)[G3WGmOi-T",
+                                "fields": {
+                                  "BOOL": "TRUE"
+                                }
+                              }
                             }
                           }
                         }
-                      },
-                      "next": {
-                        "block": {
-                          "type": "delay",
-                          "id": "45BA([9g7/_tItSnUwB-",
-                          "fields": {
-                            "DURATION_MS": 500
-                          }
+                      }
+                    },
+                    "next": {
+                      "block": {
+                        "type": "delay",
+                        "id": "IXp?_lac7+V*GG!lW{]0",
+                        "fields": {
+                          "DURATION_MS": 1000
                         }
                       }
                     }
@@ -76,7 +72,80 @@
             }
           }
         }
+      },
+      {
+        "type": "procedures_defreturn",
+        "id": "4W(2:w1NGV^I;j6@^_I|",
+        "x": 630,
+        "y": 210,
+        "extraState": {
+          "params": [
+            {
+              "name": "logic",
+              "id": "-HsGyh[-?q^.O;|%cRw="
+            }
+          ]
+        },
+        "icons": {
+          "comment": {
+            "text": "Describe this function...",
+            "pinned": false,
+            "height": 80,
+            "width": 160
+          }
+        },
+        "fields": {
+          "NAME": "foo"
+        },
+        "inputs": {
+          "STACK": {
+            "block": {
+              "type": "digitalOut",
+              "id": "@.#O-pmBQ/iD*yw?nVpw",
+              "fields": {
+                "GPIO": 17
+              },
+              "inputs": {
+                "digitalOut": {
+                  "block": {
+                    "type": "variables_get",
+                    "id": "H%L0RpA8^Wt+Y~*sY0wH",
+                    "fields": {
+                      "VAR": {
+                        "id": "-HsGyh[-?q^.O;|%cRw="
+                      }
+                    }
+                  }
+                }
+              },
+              "next": {
+                "block": {
+                  "type": "delay",
+                  "id": "GGjd9rTd!=`+-xt[nH-l",
+                  "fields": {
+                    "DURATION_MS": 1000
+                  }
+                }
+              }
+            }
+          },
+          "RETURN": {
+            "block": {
+              "type": "logic_boolean",
+              "id": "xwUu7IW=*1qG5ae#*LzZ",
+              "fields": {
+                "BOOL": "FALSE"
+              }
+            }
+          }
+        }
       }
     ]
-  }
+  },
+  "variables": [
+    {
+      "name": "logic",
+      "id": "-HsGyh[-?q^.O;|%cRw="
+    }
+  ]
 }

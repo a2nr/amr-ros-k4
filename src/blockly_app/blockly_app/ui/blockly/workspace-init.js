@@ -62,6 +62,18 @@ function initWorkspace() {
     }
   });
 
+  // Enforce single main_program block per workspace
+  ws.addChangeListener(function (event) {
+    if (event.type === Blockly.Events.BLOCK_CREATE) {
+      const mainBlocks = ws.getBlocksByType('main_program');
+      if (mainBlocks.length > 1) {
+        const newest = mainBlocks[mainBlocks.length - 1];
+        newest.dispose();
+        consoleLog('Only one Main Program block is allowed', 'error');
+      }
+    }
+  });
+
   // Refresh Code tab when blocks change
   ws.addChangeListener(function () {
     const codePanel = document.getElementById('code-panel');

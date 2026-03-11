@@ -40,6 +40,6 @@ function switchTab(tab) {
  */
 function refreshCodePanel() {
   if (typeof workspace === 'undefined' || !workspace) return;
-  const code = javascript.javascriptGenerator.workspaceToCode(workspace);
+  const code = generateCode(workspace);
   document.getElementById('code-output').textContent = code || '// (no blocks)';
 }
