@@ -2,8 +2,8 @@
 
 > **Project**: Blockly ROS2 Robot Controller (Kiwi Wheel AMR)
 > **ROS2 Distro**: Jazzy
-> **Last Updated**: 2026-03-10
-> **Current Focus**: `kiwi_controller` — Adaptive control for Kiwi Wheel drive
+> **Last Updated**: 2026-03-12
+> **Current Focus**: 
 
 Dokumentasi lengkap dapat dilihat di [DOCUMENTATION.md](DOCUMENTATION.md).
 
@@ -36,46 +36,31 @@ jelaskan apa yang dimaksut untuk menyelesaikan task
 
 # Potential Enhancements
 this list is short by priority
-- **ROS Feature in generated block blocky**: currently, block blocky only generate action client, and there is sub/pub and other ROS feature need to implement to get/set value to node.
+- **low level node enhancement**: porting gpio_node to c++ and all low level node that run on raspberry pi using c++, if you use cross compile it using host PC, and send binnary to raspberry pi it gonna help me develop it faster.
 - **Launch files**: `blockly_bringup` package with ROS2 launch files to start all nodes with one command
-- **Sensor integration**: Subscriber nodes for sensor data feeding back into Blockly visual feedback
-- **ROS2 lifecycle nodes**: Migrate executor and controller to lifecycle nodes for managed state transitions
 - **Simulation**: Integrate with Gazebo/Isaac Sim for testing Kiwi Wheel kinematics before deploying to hardware
 - **Block categories**: Future blocks grouped into Robot, Sensors, Navigation categories
 
 # Feature Task
 
-## 1 GPIO Node (digital out + digital in) : [x]
-Membuat ROS2 node (`gpio_node`) yang berjalan di Raspberry Pi untuk mengontrol pin GPIO secara langsung melalui `gpiod`. Node ini menerima perintah digital output via topic `/gpio/write` dan mempublikasikan state digital input via topic `/gpio/state`. Executor handler di-wire-up untuk publish/subscribe ke topic-topic tersebut pada mode real hardware.
+## 1 Bug Fix: Blockly Debug Mode — Step Into for Function Blocks : [x]
+Debug mode tidak bisa step into ke function blocks karena `highlightBlock()` bersifat synchronous — tidak bisa pause execution. Hanya `executeAction()` yang bisa pause, sehingga blocks tanpa `executeAction()` (function calls, variables, math) tidak bisa di-debug. Fix ini mengubah arsitektur debug engine:
+
+1. **Async `highlightBlock()`** — menjadi universal pause point. Semua block generators menggunakan `await highlightBlock()` sehingga setiap block bisa di-breakpoint dan di-step.
+2. **Call depth tracking** — `enterFunction()/exitFunction()` di-inject ke generated code di procedure calls. Step Over menggunakan `callDepth` untuk skip function bodies.
+3. **Step modes** — `stepMode` state machine ('into'|'over'|'continue') menggantikan monkey-patching `highlightBlock` di setiap step function.
+4. **Auto-pause at first block** — debug mode langsung pause di block pertama (tidak perlu breakpoint untuk mulai stepping).
+5. **Run = Continue** — Run button saat paused berfungsi sebagai Continue (resume sampai breakpoint berikutnya).
 
 ### Definition Of Done
-- Package `gpio_node` dibuat dengan entry point `gpio_node = gpio_node.gpio_node:main`
-- Custom message `GpioWrite.msg` dan `GpioRead.msg` didefinisikan di `blockly_interfaces`
-- Handler `digital_out` mempublish `GpioWrite` ke `/gpio/write` pada mode real
-- Handler `digital_in` subscribe ke `/gpio/state` dan membaca cache pin state
-- Block `digitalIn.js` ditambahkan sebagai output block (return 0/1)
-- Task `pixi run gpio-node` dan `pixi run build-gpio` tersedia
-- Dependency `gpiod` ditambahkan untuk `linux-aarch64`
-- Integration test `test_block_gpio.py` mencakup digital_out dan digital_in
-- `pixi run build` berhasil tanpa error
-
-## 2 Function & Main Program Block in Blockly : [x]
-Saat ini Blockly workspace hanya mendukung linear execution — semua top-level blocks dijalankan berurutan tanpa entry point yang jelas. Belum ada cara untuk mendefinisikan reusable functions. Enhancement ini menambahkan:
-1. **Function blocks** — menggunakan built-in Blockly procedure blocks (`procedures_defnoreturn`, `procedures_defreturn`, `procedures_callnoreturn`, `procedures_callreturn`) dengan override code generator untuk menghasilkan `async function` + `await` calls agar kompatibel dengan `executeAction()`.
-2. **Main Program block** — custom hat block sebagai entry point program. Ketika ada Main Program block, hanya function definitions + main block body yang di-execute (orphan blocks diabaikan). Tanpa Main Program block, behavior tetap backward compatible.
-
-Perubahan ini murni di sisi JS/frontend. Tidak ada perubahan di Python side (executor, handlers, action interface).
-
-### Definition Of Done
-- File `async-procedures.js` dibuat di `blockly/core/` — override procedure generators ke async/await + fungsi `generateCode(ws)`
-- File `mainProgram.js` dibuat di `blockly/blocks/` — Main Program hat block (no top/bottom connector, statement input BODY)
-- Category "Functions" muncul di toolbox (menggunakan `custom: 'PROCEDURE'`)
-- Category "Program" muncul di toolbox dengan Main Program block
-- Hanya satu Main Program block diperbolehkan per workspace (enforced via change listener)
-- `debug-engine.js`, `ui-tabs.js` menggunakan `generateCode()` sebagai pengganti `workspaceToCode()`
-- Tanpa Main block: blocks lama tetap berjalan normal (backward compatible)
-- Dengan Main block: hanya function definitions + main block body yang di-execute
-- Code tab menampilkan generated code yang sesuai (async functions + main body)
-- Debug mode (breakpoints, step over/into) bekerja di dalam function calls
-- Export/Import workspace dengan main block & functions bisa di-save dan di-load
+- `debug-engine.js` di-rewrite: async `highlightBlock()` override di `runDebug()`, `callDepth` tracking, `stepMode` state machine
+- `enterFunction()`/`exitFunction()` global helpers tersedia untuk generated code
+- `async-procedures.js`: `procedures_callreturn` wrapped dengan async IIFE + `highlightBlock()` + depth tracking
+- `async-procedures.js`: `procedures_callnoreturn` menggunakan `await highlightBlock()` + `enterFunction()/exitFunction()` dengan try/finally
+- Block generators (`digitalOut.js`, `delay.js`, `mainProgram.js`) menggunakan `await highlightBlock()`
+- `ui-controls.js`: Run button enabled saat paused (Continue behavior), `onRunClick()` memanggil `continueExecution()`
+- Step Into pada function call block → pause di block pertama dalam function body
+- Step Over pada function call block → skip function body, pause di block berikutnya
+- Debug mode pause di block pertama tanpa perlu breakpoint
+- Non-debug mode (`runProgram()`) tidak terpengaruh — `await` pada synchronous `highlightBlock()` adalah no-op
 - `pixi run build-app` berhasil tanpa error

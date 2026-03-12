@@ -50,21 +50,34 @@
 
   // ─── Override: procedures_callreturn ────────────────────────────────────────
   // Original returns: [funcName(args), ORDER.FUNCTION_CALL]
-  // Override returns:  [(await funcName(args)), ORDER.AWAIT]
+  // Override wraps in async IIFE with highlightBlock + call depth tracking.
+  // The IIFE is needed because this is a value expression (returns a value),
+  // but we need to await highlightBlock() and track call depth as statements.
   gen.forBlock['procedures_callreturn'] = function (block, generator) {
     const [code, _order] = origCallReturn.call(this, block, generator);
-    return ['(await ' + code + ')', javascript.Order.AWAIT];
+    const id = block.id;
+    // enterFunction() BEFORE highlightBlock() so that Step Over from the
+    // parent block (which embeds this value expression) sees callDepth > stepStartDepth
+    // and skips this highlight entirely. Step Into still pauses because it ignores depth.
+    return [
+      "(await (async function() { enterFunction(); await highlightBlock('" + id + "'); " +
+        'try { return await ' + code + '; } ' +
+        'finally { exitFunction(); } ' +
+        '})())',
+      javascript.Order.AWAIT,
+    ];
   };
 
   // ─── Override: procedures_callnoreturn ──────────────────────────────────────
   // Original delegates to callreturn[0] + ";\n"
-  // Override adds highlightBlock() for debug support + await
+  // Override adds await highlightBlock() for debug + call depth tracking
   gen.forBlock['procedures_callnoreturn'] = function (block, generator) {
     // Use original callreturn (pre-override) to get clean funcName(args)
     const [code, _order] = origCallReturn.call(this, block, generator);
     return (
-      "highlightBlock('" + block.id + "');\n" +
-      'await ' + code + ';\n'
+      "await highlightBlock('" + block.id + "');\n" +
+      'enterFunction();\n' +
+      'try { await ' + code + '; } finally { exitFunction(); }\n'
     );
   };
 

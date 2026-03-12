@@ -29,7 +29,7 @@ BlockRegistry.register({
   generator: function (block) {
     const ms = block.getFieldValue('DURATION_MS');
     return (
-      "highlightBlock('" + block.id + "');\n" +
+      "await highlightBlock('" + block.id + "');\n" +
       "await executeAction('delay', { duration_ms: '" + ms + "' });\n"
     );
   },

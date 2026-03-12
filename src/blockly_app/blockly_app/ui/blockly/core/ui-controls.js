@@ -15,7 +15,10 @@
  * Runs in debug mode or normal mode depending on debug toggle.
  */
 function onRunClick() {
-  if (debugModeActive) {
+  if (debugState.isPaused) {
+    // Already paused in debug — "Run" acts as "Continue" (resume until next breakpoint)
+    continueExecution();
+  } else if (debugModeActive) {
     runDebug();
   } else {
     runProgram();
@@ -58,7 +61,8 @@ function updateButtonStates() {
   const btnStop = document.getElementById('btn-stop');
 
   if (debugState.isRunning) {
-    btnRun.disabled = true;
+    // When paused, enable Run (acts as Continue), Step Over, and Step Into
+    btnRun.disabled = !debugState.isPaused;
     btnStop.disabled = false;
     btnStepOver.disabled = !debugState.isPaused;
     btnStepInto.disabled = !debugState.isPaused;

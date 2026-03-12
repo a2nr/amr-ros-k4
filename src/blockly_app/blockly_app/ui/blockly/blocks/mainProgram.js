@@ -30,6 +30,6 @@ BlockRegistry.register({
 
   generator: function (block) {
     const body = javascript.javascriptGenerator.statementToCode(block, 'BODY');
-    return "highlightBlock('" + block.id + "');\n" + body;
+    return "await highlightBlock('" + block.id + "');\n" + body;
   },
 });
