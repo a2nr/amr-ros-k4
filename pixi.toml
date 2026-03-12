@@ -34,6 +34,8 @@ pywebview                            = "*"
 
 [tasks]
 build-interfaces = "colcon build --symlink-install --packages-select blockly_interfaces"
+
+[target.linux-64.tasks]
 build-executor   = { cmd = "colcon build --symlink-install --packages-select blockly_executor", depends-on = ["build-interfaces"] }
 build-app        = { cmd = "colcon build --symlink-install --packages-select blockly_app", depends-on = ["build-interfaces"] }
 build            = { cmd = "colcon build --symlink-install", depends-on = ["build-interfaces"] }
