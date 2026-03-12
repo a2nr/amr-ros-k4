@@ -57,48 +57,79 @@ GpioNode::GpioNode()
 
 GpioNode::~GpioNode()
 {
-  // gpiod::line_request releases lines automatically when destroyed,
-  // but we log it explicitly for visibility.
   if (output_request_) {
-    output_request_->release();
-    output_request_.reset();
+    gpiod_line_request_release(output_request_);
+    output_request_ = nullptr;
   }
   if (input_request_) {
-    input_request_->release();
-    input_request_.reset();
+    gpiod_line_request_release(input_request_);
+    input_request_ = nullptr;
   }
   RCLCPP_INFO(this->get_logger(), "GPIO lines released");
 }
 
 void GpioNode::setup_gpio(const std::string & chip_path)
 {
-  gpiod::chip chip(chip_path);
+  struct gpiod_chip * chip = gpiod_chip_open(chip_path.c_str());
+  if (!chip) {
+    throw std::runtime_error("Failed to open GPIO chip: " + chip_path);
+  }
 
   // Request output lines as a single batch
   if (!output_pins_.empty()) {
-    auto out_settings = gpiod::line_settings();
-    out_settings.set_direction(gpiod::line::direction::OUTPUT);
+    struct gpiod_line_settings * settings = gpiod_line_settings_new();
+    gpiod_line_settings_set_direction(settings, GPIOD_LINE_DIRECTION_OUTPUT);
 
-    auto out_rb = chip.prepare_request().set_consumer("gpio_node");
+    struct gpiod_line_config * line_cfg = gpiod_line_config_new();
     for (auto pin : output_pins_) {
-      out_rb.add_line_settings(static_cast<unsigned int>(pin), out_settings);
+      unsigned int offset = static_cast<unsigned int>(pin);
+      gpiod_line_config_add_line_settings(line_cfg, &offset, 1, settings);
       RCLCPP_INFO(this->get_logger(), "Configured pin %ld as OUTPUT", pin);
     }
-    output_request_ = std::make_unique<gpiod::line_request>(out_rb.do_request());
+
+    struct gpiod_request_config * req_cfg = gpiod_request_config_new();
+    gpiod_request_config_set_consumer(req_cfg, "gpio_node");
+
+    output_request_ = gpiod_chip_request_lines(chip, req_cfg, line_cfg);
+
+    gpiod_request_config_free(req_cfg);
+    gpiod_line_config_free(line_cfg);
+    gpiod_line_settings_free(settings);
+
+    if (!output_request_) {
+      gpiod_chip_close(chip);
+      throw std::runtime_error("Failed to request output lines");
+    }
   }
 
   // Request input lines as a single batch
   if (!input_pins_.empty()) {
-    auto in_settings = gpiod::line_settings();
-    in_settings.set_direction(gpiod::line::direction::INPUT);
+    struct gpiod_line_settings * settings = gpiod_line_settings_new();
+    gpiod_line_settings_set_direction(settings, GPIOD_LINE_DIRECTION_INPUT);
 
-    auto in_rb = chip.prepare_request().set_consumer("gpio_node");
+    struct gpiod_line_config * line_cfg = gpiod_line_config_new();
     for (auto pin : input_pins_) {
-      in_rb.add_line_settings(static_cast<unsigned int>(pin), in_settings);
+      unsigned int offset = static_cast<unsigned int>(pin);
+      gpiod_line_config_add_line_settings(line_cfg, &offset, 1, settings);
       RCLCPP_INFO(this->get_logger(), "Configured pin %ld as INPUT", pin);
     }
-    input_request_ = std::make_unique<gpiod::line_request>(in_rb.do_request());
+
+    struct gpiod_request_config * req_cfg = gpiod_request_config_new();
+    gpiod_request_config_set_consumer(req_cfg, "gpio_node");
+
+    input_request_ = gpiod_chip_request_lines(chip, req_cfg, line_cfg);
+
+    gpiod_request_config_free(req_cfg);
+    gpiod_line_config_free(line_cfg);
+    gpiod_line_settings_free(settings);
+
+    if (!input_request_) {
+      gpiod_chip_close(chip);
+      throw std::runtime_error("Failed to request input lines");
+    }
   }
+
+  gpiod_chip_close(chip);
 }
 
 void GpioNode::write_callback(
@@ -118,9 +149,10 @@ void GpioNode::write_callback(
   }
 
   if (output_request_) {
-    output_request_->set_value(
-      pin,
-      state ? gpiod::line::value::ACTIVE : gpiod::line::value::INACTIVE);
+    enum gpiod_line_value value =
+      state ? GPIOD_LINE_VALUE_ACTIVE : GPIOD_LINE_VALUE_INACTIVE;
+    gpiod_line_request_set_value(
+      output_request_, static_cast<unsigned int>(pin), value);
   }
 
   RCLCPP_INFO(
@@ -135,8 +167,10 @@ void GpioNode::read_callback()
     msg.pin = static_cast<uint8_t>(pin);
 
     if (input_request_) {
-      msg.state =
-        input_request_->get_value(pin) == gpiod::line::value::ACTIVE;
+      enum gpiod_line_value value =
+        gpiod_line_request_get_value(
+          input_request_, static_cast<unsigned int>(pin));
+      msg.state = (value == GPIOD_LINE_VALUE_ACTIVE);
     }
 
     state_pub_->publish(msg);

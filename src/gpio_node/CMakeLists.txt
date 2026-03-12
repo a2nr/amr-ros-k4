@@ -10,9 +10,9 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(blockly_interfaces REQUIRED)
 
-# libgpiod C++ bindings (via pkg-config)
+# libgpiod C API (via pkg-config)
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(GPIOD REQUIRED libgpiodcxx)
+pkg_check_modules(GPIOD REQUIRED libgpiod)
 
 add_executable(gpio_node
   src/main.cpp
