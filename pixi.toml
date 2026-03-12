@@ -24,15 +24,13 @@ qtpy                                 = "*"
 
 [target.linux-aarch64.dependencies]
 ros-jazzy-ros-base                   = "*"
+ros-jazzy-rclcpp                     = "*"     # C++ ROS2 client library for gpio_node
+libgpiod                             = "*"     # C/C++ libgpiod (gpiodcxx) for GPIO hardware access
 
 # pywebview is only on PyPI, not conda-forge.
 # Desktop-only — Raspberry Pi only runs Executor Node.
 [target.linux-64.pypi-dependencies]
 pywebview                            = "*"
-
-# gpiod for GPIO control on Raspberry Pi
-[target.linux-aarch64.pypi-dependencies]
-gpiod                                = "*"
 
 [tasks]
 build-interfaces = "colcon build --symlink-install --packages-select blockly_interfaces"

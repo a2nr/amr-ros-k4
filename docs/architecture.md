@@ -58,12 +58,11 @@
 └─────────────┼────────────────────────────────────────────────────┘
               │  ROS2 Topics: /gpio/write, /gpio/state
 ┌─────────────▼────────────────────────────────────────────────────┐
-│             GPIO Node (Raspberry Pi)                             │
-│             gpiod digital I/O                                    │
+│             GPIO Node (Raspberry Pi, C++)                        │
+│             libgpiod digital I/O (hardware-only)                 │
 │                                                                  │
 │  Subscribes /gpio/write → set pin HIGH/LOW                       │
 │  Publishes  /gpio/state → input pin readings (10 Hz)             │
-│  Falls back to simulation mode if gpiod unavailable              │
 └──────────────────────────────────────────────────────────────────┘
 ```
 

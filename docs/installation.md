@@ -40,14 +40,14 @@ amr-ros-k4/                                    # ROS2 Workspace root
     │       ├── test_block_gpio.py              # digital_out + digital_in tests
     │       └── test_block_delay.py
     │
-    ├── gpio_node/                              # ROS2 GPIO node for Raspberry Pi (ament_python)
+    ├── gpio_node/                              # ROS2 GPIO node for Raspberry Pi (ament_cmake, C++)
+    │   ├── CMakeLists.txt                      # ament_cmake build — rclcpp + libgpiodcxx
     │   ├── package.xml
-    │   ├── setup.py
-    │   ├── setup.cfg
-    │   ├── resource/gpio_node                  # Ament index marker
-    │   └── gpio_node/                          # Python module
-    │       ├── __init__.py
-    │       └── gpio_node.py                    # ROS2 node: gpiod digital I/O
+    │   ├── include/gpio_node/
+    │   │   └── gpio_node.hpp                   # GpioNode class declaration
+    │   └── src/
+    │       ├── main.cpp                        # Entry point — rclcpp::spin(node)
+    │       └── gpio_node.cpp                   # ROS2 node: libgpiod digital I/O
     │
     └── blockly_app/                            # pywebview desktop application (ament_python)
         ├── package.xml
@@ -169,7 +169,7 @@ pixi run gpio-node
 pixi run gpio-node -- --ros-args -p output_pins:=[17,27] -p input_pins:=[5,6]
 ```
 
-The GPIO node requires `gpiod` (auto-installed on `linux-aarch64`). On x86 dev machines it runs in simulation mode (log only).
+The GPIO node is a C++ node that requires `libgpiod` (auto-installed on `linux-aarch64` via Pixi). It is hardware-only and must be built and run on the Raspberry Pi (`pixi run build-gpio && pixi run gpio-node`).
 
 The executor logs all received goals and their results to the terminal.
 
