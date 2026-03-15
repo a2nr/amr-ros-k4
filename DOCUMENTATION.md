@@ -23,6 +23,8 @@ See [readme.md](readme.md) for project overview and status.
 
 ## Quick Start
 
+### Desktop (linux-64)
+
 ```bash
 pixi install                  # first time only
 pixi run build-interfaces     # must build interfaces first
@@ -32,5 +34,16 @@ pixi run setup-ui             # download Blockly JS vendor files (first time, ne
 pixi run executor             # Terminal 1 — start Action Server
 pixi run app                  # Terminal 2 — start desktop GUI
 ```
+
+### Raspberry Pi (linux-aarch64)
+
+```bash
+pixi install                  # install ROS2 + deps via conda
+pixi run build-gpio           # installs system deps (apt) + builds gpio_node
+
+pixi run gpio-node            # start GPIO node
+```
+
+`build-gpio` automatically runs `setup-dep` which installs system libraries (`libgpiod-dev`, `liblttng-ust-dev`) via `apt`.
 
 See [docs/installation.md](docs/installation.md) for full setup and prerequisites.

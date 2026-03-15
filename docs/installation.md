@@ -41,7 +41,7 @@ amr-ros-k4/                                    # ROS2 Workspace root
     │       └── test_block_delay.py
     │
     ├── gpio_node/                              # ROS2 GPIO node for Raspberry Pi (ament_cmake, C++)
-    │   ├── CMakeLists.txt                      # ament_cmake build — rclcpp + libgpiodcxx
+    │   ├── CMakeLists.txt                      # ament_cmake build — rclcpp + libgpiod (C API)
     │   ├── package.xml
     │   ├── include/gpio_node/
     │   │   └── gpio_node.hpp                   # GpioNode class declaration
@@ -161,15 +161,22 @@ The executor does NOT run on the Raspberry Pi directly. In real hardware mode, h
 
 ### 5.3 Running the GPIO Node (Raspberry Pi)
 
+The GPIO node is a C++ node using `rclcpp` and `libgpiod` C API. It must be **built and run natively on the Raspberry Pi** (cross-compilation is not practical for ROS2 C++ packages).
+
 ```bash
-# On Raspberry Pi: start GPIO node with default pin configuration
+# First time: install deps + build (setup-dep runs apt automatically)
+pixi run build-gpio
+
+# Start GPIO node with default pin configuration
 pixi run gpio-node
 
 # Custom pins via ROS2 parameters
 pixi run gpio-node -- --ros-args -p output_pins:=[17,27] -p input_pins:=[5,6]
 ```
 
-The GPIO node is a C++ node that requires `libgpiod` (auto-installed on `linux-aarch64` via Pixi). It is hardware-only and must be built and run on the Raspberry Pi (`pixi run build-gpio && pixi run gpio-node`).
+`build-gpio` depends on `setup-dep` which installs system libraries via `apt`:
+- `libgpiod-dev` / `gpiod` — GPIO header + shared library + CLI tools
+- `liblttng-ust-dev` / `lttng-tools` — required by RoboStack's `rclcpp` (built with LTTng tracing)
 
 The executor logs all received goals and their results to the terminal.
 

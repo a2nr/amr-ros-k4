@@ -2,8 +2,8 @@
 
 > **Project**: Blockly ROS2 Robot Controller (Kiwi Wheel AMR)
 > **ROS2 Distro**: Jazzy
-> **Last Updated**: 2026-03-12
-> **Current Focus**: 
+> **Last Updated**: 2026-03-16
+> **Current Focus**:
 
 Dokumentasi lengkap dapat dilihat di [DOCUMENTATION.md](DOCUMENTATION.md).
 
@@ -36,7 +36,6 @@ jelaskan apa yang dimaksut untuk menyelesaikan task
 
 # Potential Enhancements
 this list is short by priority
-- **low level node enhancement**: porting gpio_node to c++ and all low level node that run on raspberry pi using c++, if you use cross compile it using host PC, and send binnary to raspberry pi it gonna help me develop it faster.
 - **Launch files**: `blockly_bringup` package with ROS2 launch files to start all nodes with one command
 - **Simulation**: Integrate with Gazebo/Isaac Sim for testing Kiwi Wheel kinematics before deploying to hardware
 - **Block categories**: Future blocks grouped into Robot, Sensors, Navigation categories
@@ -65,63 +64,62 @@ Debug mode tidak bisa step into ke function blocks karena `highlightBlock()` ber
 - Non-debug mode (`runProgram()`) tidak terpengaruh — `await` pada synchronous `highlightBlock()` adalah no-op
 - `pixi run build-app` berhasil tanpa error
 
-## 2 Enhancement: Port gpio_node to C++ : [ ]
-gpio_node saat ini ditulis dalam Python (`ament_python`) menggunakan `rclpy` dan `gpiod` (Python binding). Untuk performa dan deployment yang lebih baik di Raspberry Pi, port ke C++ menggunakan `rclcpp` dan `libgpiod` C++ API (`libgpiodcxx`). Node ini **hardware-only** — tidak ada simulation fallback, hanya berjalan di Raspberry Pi dengan akses ke `/dev/gpiochipX`.
+## 2 Enhancement: Port gpio_node to C++ : [x]
+gpio_node di-port dari Python (`ament_python`, `rclpy`, `gpiod` Python binding) ke C++ (`ament_cmake`, `rclcpp`, `libgpiod` **C API**). Node ini hardware-only — hanya berjalan di Raspberry Pi dengan akses ke `/dev/gpiochipX`.
 
-### Scope
-1. **C++ port** — Rewrite `gpio_node.py` → `gpio_node.cpp` menggunakan `rclcpp`, `libgpiod` C++ bindings
-2. **ament_cmake** — Ubah package structure dari `ament_python` ke `ament_cmake` (`CMakeLists.txt` + `package.xml`)
-3. **Pixi dependency management** — Tambahkan `ros-jazzy-rclcpp`, `libgpiod` (C++ library) sebagai dependency di `pixi.toml` untuk `linux-aarch64`
-4. **Native build on Pi** — Build langsung di Raspberry Pi via `pixi run build-gpio` (cross-compilation ROS2 C++ terlalu kompleks — butuh full aarch64 sysroot dengan semua ROS2 libs)
+### Implementasi
 
-### Perubahan yang Dibutuhkan
-
-#### A. Package Structure (hapus Python, buat C++)
+#### A. Package Structure (C++, ament_cmake)
 ```
 src/gpio_node/
-├── CMakeLists.txt          # ament_cmake, find libgpiod, build gpio_node executable
-├── package.xml             # ament_cmake, depend: rclcpp, blockly_interfaces, libgpiod
+├── CMakeLists.txt          # ament_cmake, pkg_check_modules(libgpiod), build executable
+├── package.xml             # depend: rclcpp, blockly_interfaces
 ├── include/gpio_node/
-│   └── gpio_node.hpp       # GpioNode class declaration
+│   └── gpio_node.hpp       # GpioNode class — rclcpp::Node + gpiod C API raw pointers
 └── src/
-    ├── gpio_node.cpp        # GpioNode class implementation
-    └── main.cpp             # main() entry point — rclcpp::spin(node)
+    ├── gpio_node.cpp        # GpioNode implementation (setup_gpio, write_callback, read_callback)
+    └── main.cpp             # main() — rclcpp::spin(node)
 ```
 
-Hapus: `gpio_node/gpio_node.py`, `gpio_node/__init__.py`, `setup.py`, `setup.cfg`, `resource/gpio_node`
+Dihapus: semua file Python (`gpio_node.py`, `__init__.py`, `setup.py`, `setup.cfg`, `resource/`)
 
-#### B. C++ Node — Same API Surface
-- **Subscribe** `/gpio/write` (`blockly_interfaces::msg::GpioWrite`) — set pin output via `gpiod::line_request::set_value()`
-- **Publish** `/gpio/state` (`blockly_interfaces::msg::GpioRead`) — poll input pins via timer (10 Hz default)
+#### B. C++ Node — Same ROS2 API Surface
+- **Subscribe** `/gpio/write` (`GpioWrite`) — `gpiod_line_request_set_value()` untuk set pin output
+- **Publish** `/gpio/state` (`GpioRead`) — `gpiod_line_request_get_value()` via polling timer (10 Hz default)
 - **Parameters**: `output_pins` (int array), `input_pins` (int array), `input_publish_rate` (double), `gpio_chip` (string, default `/dev/gpiochip0`)
-- Hanya pin yang ada di `output_pins` yang bisa di-write; pin tidak terdaftar → log warning
-- Cleanup: `gpiod::line_request::release()` di destructor
+- Pin tidak terdaftar di `output_pins` → log warning, ignore write
+- Cleanup: `gpiod_line_request_release()` di destructor (manual memory management, bukan C++ RAII)
 
-#### C. pixi.toml — Dependency Updates
-```toml
-[target.linux-aarch64.dependencies]
-ros-jazzy-ros-base  = "*"
-ros-jazzy-rclcpp    = "*"     # C++ ROS2 client library
-libgpiod            = "*"     # C/C++ libgpiod (gpiodcxx)
+#### C. Catatan: libgpiod C API, bukan C++ Bindings
+conda-forge `libgpiod` **hanya menyertakan C library** (`gpiod.h`), bukan C++ bindings (`gpiod.hpp` / `libgpiodcxx`). Oleh karena itu implementasi menggunakan gpiod v2 **C API** langsung. Semua resource (`gpiod_line_request`, `gpiod_line_config`, dll.) di-manage manual via `gpiod_*_free()`.
+
+#### D. Platform-Specific Tasks & System Dependencies
+Cross-compilation ROS2 C++ tidak praktis (butuh full aarch64 sysroot). Build dilakukan **native di Raspberry Pi**.
+
+pixi.toml menggunakan **platform-specific task sections**:
+- `[target.linux-64.tasks]` — desktop tasks (build-app, executor, app, test)
+- `[target.linux-aarch64.tasks]` — Pi tasks (setup-dep, build-gpio, gpio-node)
+
+`setup-dep` task menginstall system libraries via `apt` yang tidak tersedia / tidak lengkap di conda-forge:
+```bash
+sudo apt install -y liblttng-ust-dev lttng-tools libgpiod-dev gpiod
 ```
-Hapus `gpiod` dari `[target.linux-aarch64.pypi-dependencies]`
-
-#### D. Build on Pi
-Build dilakukan **natively di Raspberry Pi** (cross-compilation ROS2 C++ tidak praktis — butuh full aarch64 sysroot dengan semua ROS2 shared libraries).
+- `libgpiod-dev` — header + `.so` untuk linking (conda package tidak menyertakan `.so` symlink untuk linker)
+- `liblttng-ust-dev` + `lttng-tools` — dibutuhkan oleh `rclcpp` (RoboStack) yang di-build dengan LTTng tracing support
 
 ```bash
 # Di Pi: clone repo + install deps + build + run
 git clone <repo> ~/amr-ros-k4 && cd ~/amr-ros-k4
-pixi install && pixi run build-gpio
+pixi install && pixi run build-gpio   # setup-dep runs automatically
 pixi run gpio-node
 ```
 
 ### Definition Of Done
-- `src/gpio_node/` berisi `CMakeLists.txt`, `package.xml`, `include/`, `src/` — tidak ada file Python
-- `pixi.toml` menyertakan `ros-jazzy-rclcpp` dan `libgpiod` di `linux-aarch64` dependencies
-- `pixi.toml` tidak lagi menyertakan `gpiod` di `linux-aarch64` pypi-dependencies
-- `pixi run build-gpio` berhasil di Raspberry Pi (native build) tanpa error
-- Node berjalan: `pixi run gpio-node` — subscribe `/gpio/write`, publish `/gpio/state`
-- Parameter `output_pins`, `input_pins`, `input_publish_rate`, `gpio_chip` berfungsi via `--ros-args -p`
-- Executor (`blockly_executor`) tetap berfungsi tanpa perubahan — interface ROS2 identik
-- `pixi run build-gpio` di Pi (native build) berhasil tanpa error
+- [x] `src/gpio_node/` berisi `CMakeLists.txt`, `package.xml`, `include/`, `src/` — tidak ada file Python
+- [x] `pixi.toml` menyertakan `ros-jazzy-rclcpp` di `linux-aarch64` dependencies
+- [x] `pixi.toml` tidak lagi menyertakan `gpiod` di `linux-aarch64` pypi-dependencies
+- [x] `setup-dep` task menginstall `libgpiod-dev`, `liblttng-ust-dev` via apt
+- [x] `pixi run build-gpio` berhasil di Raspberry Pi (native build) tanpa error
+- [x] Node berjalan: `pixi run gpio-node` — subscribe `/gpio/write`, publish `/gpio/state`
+- [x] Parameter `output_pins`, `input_pins`, `input_publish_rate`, `gpio_chip` berfungsi via `--ros-args -p`
+- [x] Executor (`blockly_executor`) tetap berfungsi tanpa perubahan — interface ROS2 identik
