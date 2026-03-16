@@ -17,9 +17,9 @@ See [readme.md](readme.md) for project overview and status.
 | `blockly_app` — creating custom blocks (full guide + reference) | [src/blockly_app/BLOCKS.md](src/blockly_app/BLOCKS.md) |
 | `blockly_executor` — file reference, handlers & testing guide | [src/blockly_executor/README.md](src/blockly_executor/README.md) |
 | `blockly_interfaces` — ROS2 action & message interfaces | [src/blockly_interfaces/README.md](src/blockly_interfaces/README.md) |
-| `gpio_node` — Raspberry Pi GPIO node (C++, libgpiod) | [src/gpio_node/](src/gpio_node/) |
-| `pca9685_node` — PCA9685 16-channel PWM controller (C++, I2C) | [src/pca9685_node/](src/pca9685_node/) |
-| `as5600_node` — AS5600 12-bit magnetic encoder (C++, I2C) | [src/as5600_node/](src/as5600_node/) |
+| `gpio_node` — Raspberry Pi GPIO node (C++, libgpiod) | [src/gpio_node/README.md](src/gpio_node/README.md) |
+| `pca9685_node` — PCA9685 16-channel PWM controller (C++, I2C) | [src/pca9685_node/README.md](src/pca9685_node/README.md) |
+| `as5600_node` — AS5600 12-bit magnetic encoder (C++, I2C) | [src/as5600_node/README.md](src/as5600_node/README.md) |
 
 ---
 

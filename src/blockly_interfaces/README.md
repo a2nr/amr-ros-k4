@@ -38,6 +38,32 @@ bool state
 
 Used for communication between the executor's GPIO handlers and the `gpio_node` running on Raspberry Pi.
 
+## PwmWrite.msg
+
+Defined in [`msg/PwmWrite.msg`](msg/PwmWrite.msg):
+
+```
+# PwmWrite — PWM duty cycle command (executor → pca9685_node)
+uint8 address       # I2C device address (e.g. 0x40)
+uint8 channel       # PWM channel (0-15)
+uint16 value        # Duty cycle (0-4095, 12-bit)
+```
+
+Used for communication between the executor's PWM handler and the `pca9685_node` running on Raspberry Pi.
+
+## EncoderRead.msg
+
+Defined in [`msg/EncoderRead.msg`](msg/EncoderRead.msg):
+
+```
+# EncoderRead — rotary encoder angle (as5600_node → executor)
+uint8 encoder_id       # Encoder index (0, 1, 2, ...)
+float32 angle          # Angle in degrees (0.0-360.0)
+uint16 raw_angle       # Raw 12-bit value (0-4095)
+```
+
+Used for communication between the `as5600_node` running on Raspberry Pi and the executor's encoder handler.
+
 ## Building
 
 ```bash
@@ -48,7 +74,7 @@ This must be run before building any other package. The generated Python modules
 
 ```python
 from blockly_interfaces.action import BlocklyAction
-from blockly_interfaces.msg import GpioWrite, GpioRead
+from blockly_interfaces.msg import GpioWrite, GpioRead, PwmWrite, EncoderRead
 ```
 
 ## Usage
