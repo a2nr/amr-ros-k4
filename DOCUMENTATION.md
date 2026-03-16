@@ -18,6 +18,7 @@ See [readme.md](readme.md) for project overview and status.
 | `blockly_executor` — file reference, handlers & testing guide | [src/blockly_executor/README.md](src/blockly_executor/README.md) |
 | `blockly_interfaces` — ROS2 action & message interfaces | [src/blockly_interfaces/README.md](src/blockly_interfaces/README.md) |
 | `gpio_node` — Raspberry Pi GPIO node (C++, libgpiod) | [src/gpio_node/](src/gpio_node/) |
+| `pca9685_node` — PCA9685 16-channel PWM controller (C++, I2C) | [src/pca9685_node/](src/pca9685_node/) |
 
 ---
 
@@ -40,10 +41,12 @@ pixi run app                  # Terminal 2 — start desktop GUI
 ```bash
 pixi install                  # install ROS2 + deps via conda
 pixi run build-gpio           # installs system deps (apt) + builds gpio_node
+pixi run build-pca9685        # installs system deps (apt) + builds pca9685_node
 
 pixi run gpio-node            # start GPIO node
+pixi run pca9685-node         # start PCA9685 PWM node
 ```
 
-`build-gpio` automatically runs `setup-dep` which installs system libraries (`libgpiod-dev`, `liblttng-ust-dev`) via `apt`.
+`build-gpio` and `build-pca9685` automatically run `setup-dep` which installs system libraries (`libgpiod-dev`, `liblttng-ust-dev`, `i2c-tools`) via `apt`.
 
 See [docs/installation.md](docs/installation.md) for full setup and prerequisites.

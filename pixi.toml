@@ -46,6 +46,8 @@ test             = { cmd = "bash -c 'source install/setup.bash && PYTHONPATH=$PY
 setup-ui         = "npm install blockly && mkdir -p src/blockly_app/blockly_app/ui/vendor && cp node_modules/blockly/blockly.min.js src/blockly_app/blockly_app/ui/vendor/ && cp node_modules/blockly/javascript_compressed.js src/blockly_app/blockly_app/ui/vendor/ && cp node_modules/blockly/blocks_compressed.js src/blockly_app/blockly_app/ui/vendor/ && cp node_modules/blockly/msg/en.js src/blockly_app/blockly_app/ui/vendor/"
 
 [target.linux-aarch64.tasks]
-setup-dep        = { cmd = "sudo apt update && sudo apt install -y liblttng-ust-dev lttng-tools libgpiod-dev gpiod"}
+setup-dep        = { cmd = "sudo apt update && sudo apt install -y liblttng-ust-dev lttng-tools libgpiod-dev gpiod i2c-tools"}
 build-gpio       = { cmd = "colcon build --symlink-install --packages-select gpio_node", depends-on = ["setup-dep", "build-interfaces"] }
 gpio-node        = { cmd = "bash -c 'source install/setup.bash && ros2 run gpio_node gpio_node'", depends-on = ["build-gpio"] }
+build-pca9685    = { cmd = "colcon build --symlink-install --packages-select pca9685_node", depends-on = ["setup-dep", "build-interfaces"] }
+pca9685-node     = { cmd = "bash -c 'source install/setup.bash && ros2 run pca9685_node pca9685_node'", depends-on = ["build-pca9685"] }

@@ -13,4 +13,5 @@ const BLOCK_FILES = [
   'digitalOut.js',
   'digitalIn.js',
   'delay.js',
+  'pwmWrite.js',
 ];

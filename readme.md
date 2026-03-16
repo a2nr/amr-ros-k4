@@ -3,7 +3,7 @@
 > **Project**: Blockly ROS2 Robot Controller (Kiwi Wheel AMR)
 > **ROS2 Distro**: Jazzy
 > **Last Updated**: 2026-03-16
-> **Current Focus**:
+> **Current Focus**: Task #3 — PCA9685 PWM Controller (I2C)
 
 Dokumentasi lengkap dapat dilihat di [DOCUMENTATION.md](DOCUMENTATION.md).
 
@@ -36,6 +36,8 @@ jelaskan apa yang dimaksut untuk menyelesaikan task
 
 # Potential Enhancements
 this list is short by priority
+- **AS5600 feature**: AS5600 magnetic based encoder with I2C interface. lets make publisher node in C/C++ to be able pusblih 3 module encoder. use parameter ins ros2 command to chose linux dev interface.
+- **Feasibility Study to implement Adaptive Controller**: mobile robot need controller to move flawlesly.
 - **Launch files**: `blockly_bringup` package with ROS2 launch files to start all nodes with one command
 - **Simulation**: Integrate with Gazebo/Isaac Sim for testing Kiwi Wheel kinematics before deploying to hardware
 - **Block categories**: Future blocks grouped into Robot, Sensors, Navigation categories
@@ -123,3 +125,96 @@ pixi run gpio-node
 - [x] Node berjalan: `pixi run gpio-node` — subscribe `/gpio/write`, publish `/gpio/state`
 - [x] Parameter `output_pins`, `input_pins`, `input_publish_rate`, `gpio_chip` berfungsi via `--ros-args -p`
 - [x] Executor (`blockly_executor`) tetap berfungsi tanpa perubahan — interface ROS2 identik
+
+## 3 Enhancement: PCA9685 — 16-Channel PWM Controller (I2C) : [ ]
+PCA9685 adalah 16-channel, 12-bit PWM controller via I2C. Motor DC kiwi wheel menggunakan 6 channel (3 motor × 2: PWM + direction), sehingga 10 channel tersedia untuk extensi (servo, LED, dll). Node ini general-purpose — mengontrol channel mana saja via Blockly block dengan parameter address, channel, dan PWM value.
+
+### Implementasi
+
+#### A. Package Structure (C++, ament_cmake)
+```
+src/pca9685_node/
+├── CMakeLists.txt              # ament_cmake — NO external lib dependency
+├── package.xml                 # depend: rclcpp, blockly_interfaces
+├── include/pca9685_node/
+│   └── pca9685_node.hpp        # Pca9685Node class + I2C helpers
+└── src/
+    ├── pca9685_node.cpp         # I2C init, write_callback, set_pwm()
+    └── main.cpp                 # rclcpp::spin(node)
+```
+
+Hardware interface menggunakan Linux I2C (`/dev/i2c-X`) via `ioctl()` — tidak perlu external library, cukup `linux/i2c-dev.h` (kernel header).
+
+#### B. ROS2 Interface
+
+**New message** — `blockly_interfaces/msg/PwmWrite.msg`:
+```
+uint8 address       # I2C address (default 0x40, configurable via solder bridges: 0x40–0x7F)
+uint8 channel       # PWM channel (0–15)
+uint16 value        # Duty cycle (0–4095, 12-bit resolution)
+```
+
+**Topic**: `/pwm/write` (executor → pca9685_node)
+
+**ROS2 Parameters** (configurable via `--ros-args -p`):
+| Parameter | Type | Default | Fungsi |
+|---|---|---|---|
+| `i2c_device` | string | `/dev/i2c-1` | Linux I2C device path |
+| `frequency` | int | 50 | PWM frequency Hz (semua channel) |
+
+PCA9685 write-only — tidak perlu `PwmRead.msg`.
+
+#### C. Node Behavior — `Pca9685Node`
+1. **Constructor**: open `i2c_device`, configure prescaler berdasarkan `frequency` param
+2. **Subscribe** `/pwm/write` (`PwmWrite`) — set duty cycle via I2C register write
+3. **`set_pwm(address, channel, value)`**: select I2C slave address via `ioctl(I2C_SLAVE)`, write 4 bytes ke channel registers
+4. **Multi-address support**: satu node bisa mengontrol multiple PCA9685 boards (address dikirim per-message, `ioctl(I2C_SLAVE)` di-set setiap write)
+5. **Cleanup**: close file descriptor di destructor
+
+PCA9685 register map:
+| Register | Address | Fungsi |
+|---|---|---|
+| MODE1 | 0x00 | Sleep/restart, auto-increment |
+| LED0_ON_L | 0x06 | Channel 0 ON timing (4 registers per channel) |
+| PRE_SCALE | 0xFE | PWM frequency: `prescale = round(25MHz / (4096 × freq)) - 1` |
+
+#### D. Handler — `blockly_executor/handlers/pwm.py`
+```python
+@handler("pwm_write")
+def handle_pwm_write(params, hardware):
+    address = int(params["address"], 16)  # hex string → int
+    channel = int(params["channel"])
+    value = int(params["value"])
+    # Dummy: log only. Real: publish PwmWrite to /pwm/write
+```
+Lazy-create publisher di `hardware.node._pwm_write_pub`, sama dengan pola `gpio.py`.
+
+#### E. Blockly Block — `pwmWrite.js`
+```
+┌──────────────────────────────────────────────┐
+│ PCA9685  addr: [0x40]                        │
+│          channel: [0 ▾]    pwm: [■ value]    │
+└──────────────────────────────────────────────┘
+```
+- **addr**: `FieldDropdown` — common addresses (0x40–0x47)
+- **channel**: `FieldNumber` (0–15)
+- **pwm**: `ValueInput` (0–4095) — accepts expression blocks, uses `String(expr)` pattern
+- Category: `Robot`, Command: `pwm_write`
+
+#### F. pixi.toml Changes
+- `setup-dep`: tambah `i2c-tools` (optional, untuk debugging `i2cdetect`)
+- `build-pca9685`: `colcon build --packages-select pca9685_node` (depends-on: setup-dep, build-interfaces)
+- `pca9685-node`: `ros2 run pca9685_node pca9685_node`
+
+Tidak perlu conda deps baru — Linux I2C headers sudah tersedia di kernel.
+
+### Definition Of Done
+- [x] `src/pca9685_node/` berisi `CMakeLists.txt`, `package.xml`, `include/`, `src/`
+- [x] `blockly_interfaces/msg/PwmWrite.msg` terdaftar di `rosidl_generate_interfaces()`
+- [x] `pixi run build-interfaces` berhasil — PwmWrite.msg ter-generate
+- [ ] `pixi run build-pca9685` berhasil di Raspberry Pi (native build) tanpa error
+- [ ] Node berjalan: `pixi run pca9685-node` — subscribe `/pwm/write`
+- [ ] Parameter `i2c_device`, `frequency` berfungsi via `--ros-args -p`
+- [x] Handler `pwm_write` berfungsi di dummy mode (test passes)
+- [x] Blockly block `pwmWrite` muncul di toolbox, generate valid JS code
+- [ ] End-to-end: Blockly block → executor (real) → `/pwm/write` → pca9685_node → I2C write
