@@ -3,7 +3,7 @@
 > **Project**: Blockly ROS2 Robot Controller (Kiwi Wheel AMR)
 > **ROS2 Distro**: Jazzy
 > **Last Updated**: 2026-03-16
-> **Current Focus**: Task #3 — PCA9685 PWM Controller (I2C)
+> **Current Focus**: Task #4 — AS5600 Magnetic Encoder (I2C)
 
 Dokumentasi lengkap dapat dilihat di [DOCUMENTATION.md](DOCUMENTATION.md).
 
@@ -36,9 +36,9 @@ jelaskan apa yang dimaksut untuk menyelesaikan task
 
 # Potential Enhancements
 this list is short by priority
-- **AS5600 feature**: AS5600 magnetic based encoder with I2C interface. lets make publisher node in C/C++ to be able pusblih 3 module encoder. use parameter ins ros2 command to chose linux dev interface.
-- **Feasibility Study to implement Adaptive Controller**: mobile robot need controller to move flawlesly.
-- **Launch files**: `blockly_bringup` package with ROS2 launch files to start all nodes with one command
+- **Blockly UI Enhancement**: Lets make Human Interface in same view to help me monitoring node that needed. it programaticaly using block is real good, you can take labview interface as refrence. you can separated program as main_program to handle human interface.
+- **Feasibility Study to implement Controller**: mobile robot need controller to move flawlesly.
+- **Launch files**: ROS2 launch files to start all nodes with one command includ node in raspberry pi
 - **Simulation**: Integrate with Gazebo/Isaac Sim for testing Kiwi Wheel kinematics before deploying to hardware
 - **Block categories**: Future blocks grouped into Robot, Sensors, Navigation categories
 
@@ -208,6 +208,23 @@ Lazy-create publisher di `hardware.node._pwm_write_pub`, sama dengan pola `gpio.
 
 Tidak perlu conda deps baru — Linux I2C headers sudah tersedia di kernel.
 
+#### G. Penggunaan
+
+```bash
+# Default — /dev/i2c-1, 50 Hz
+pixi run pca9685-node
+
+# Ganti I2C device dan frequency via --ros-args
+source install/setup.bash
+ros2 run pca9685_node pca9685_node --ros-args -p i2c_device:=/dev/i2c-0 -p frequency:=1000
+
+# Cek I2C bus yang tersedia di Pi
+ls /dev/i2c-*           # list semua bus
+i2cdetect -y 1          # scan device di bus 1 (perlu i2c-tools)
+```
+
+**Catatan**: `pixi run pca9685-node` menggunakan parameter default. Untuk override parameter, jalankan `ros2 run` langsung (setelah `source install/setup.bash`) karena pixi task tidak meneruskan `--ros-args` ke proses inner.
+
 ### Definition Of Done
 - [x] `src/pca9685_node/` berisi `CMakeLists.txt`, `package.xml`, `include/`, `src/`
 - [x] `blockly_interfaces/msg/PwmWrite.msg` terdaftar di `rosidl_generate_interfaces()`
@@ -218,3 +235,107 @@ Tidak perlu conda deps baru — Linux I2C headers sudah tersedia di kernel.
 - [x] Handler `pwm_write` berfungsi di dummy mode (test passes)
 - [x] Blockly block `pwmWrite` muncul di toolbox, generate valid JS code
 - [ ] End-to-end: Blockly block → executor (real) → `/pwm/write` → pca9685_node → I2C write
+
+## 4 Enhancement: AS5600 — 12-bit Magnetic Rotary Encoder (I2C) : [ ]
+AS5600 adalah 12-bit magnetic rotary position sensor via I2C. Kiwi wheel AMR menggunakan 3 encoder (satu per roda) untuk feedback posisi. AS5600 memiliki **fixed I2C address (0x36)** — untuk 3 module, setiap encoder menggunakan **I2C bus terpisah** (e.g., `/dev/i2c-1`, `/dev/i2c-3`, `/dev/i2c-4`). Node ini publisher — membaca angle secara periodik dan publish ke ROS2 topic.
+
+### Implementasi
+
+#### A. Package Structure (C++, ament_cmake)
+```
+src/as5600_node/
+├── CMakeLists.txt              # ament_cmake — NO external lib dependency
+├── package.xml                 # depend: rclcpp, blockly_interfaces
+├── include/as5600_node/
+│   └── as5600_node.hpp         # As5600Node class + I2C helpers
+└── src/
+    ├── as5600_node.cpp          # I2C init, timer_callback, read_raw_angle()
+    └── main.cpp                 # rclcpp::spin(node)
+```
+
+Hardware interface menggunakan Linux I2C (`/dev/i2c-X`) via `ioctl()` — tidak perlu external library, cukup `linux/i2c-dev.h` (kernel header).
+
+#### B. ROS2 Interface
+
+**New message** — `blockly_interfaces/msg/EncoderRead.msg`:
+```
+uint8 encoder_id       # Encoder index (0, 1, 2, ...)
+float32 angle          # Angle in degrees (0.0-360.0)
+uint16 raw_angle       # Raw 12-bit value (0-4095)
+```
+
+**Topic**: `/encoder/state` (as5600_node → executor)
+
+**ROS2 Parameters** (configurable via `--ros-args -p`):
+| Parameter | Type | Default | Fungsi |
+|---|---|---|---|
+| `i2c_devices` | string[] | `["/dev/i2c-1"]` | List of I2C device paths, satu per encoder |
+| `publish_rate` | double | 10.0 | Publish frequency Hz |
+
+#### C. Node Behavior — `As5600Node`
+1. **Constructor**: open setiap I2C bus, set slave address 0x36 via `ioctl(I2C_SLAVE)`, create publisher dan timer
+2. **Timer callback**: iterate semua I2C fds → read 2-byte RAW_ANGLE register → compute `angle = raw * 360.0 / 4096.0` → publish EncoderRead
+3. **`read_raw_angle(fd)`**: write register address 0x0C, read 2 bytes → `((buf[0] & 0x0F) << 8) | buf[1]` (12-bit)
+4. **Multi-bus support**: satu node mengontrol semua encoder — setiap fd dedicated ke satu bus/encoder
+5. **Cleanup**: close semua file descriptors di destructor
+
+AS5600 register map:
+| Register | Address | Fungsi |
+|---|---|---|
+| RAW_ANGLE | 0x0C-0x0D | 12-bit raw angle (0-4095) |
+| STATUS | 0x0B | Magnet detect status |
+| AGC | 0x1A | Automatic gain control |
+
+#### D. Handler — `blockly_executor/handlers/encoder.py`
+```python
+@handler("encoder_read")
+def handle_encoder_read(params, hardware):
+    encoder_id = int(params["encoder_id"])
+    # Dummy: return "0.0". Real: subscribe /encoder/state, return cached angle
+```
+Lazy-create subscriber dengan cache `{encoder_id: {angle, raw_angle}}`, sama dengan pola `digital_in` di `gpio.py`.
+
+#### E. Blockly Block — `encoderRead.js`
+```
+┌──────────────────────────────────────┐
+│ Encoder Read  id: [0]                │
+└──────────────────────────────────────┘
+```
+- **id**: `FieldNumber` (0–2)
+- Returns: `Number` (angle 0-360)
+- Category: `Robot`, Command: `encoder_read`
+- Output block (can be used in expressions, e.g., `set variable to [Encoder Read id: 0]`)
+
+#### F. pixi.toml Changes
+- `build-as5600`: `colcon build --packages-select as5600_node` (depends-on: setup-dep, build-interfaces)
+- `as5600-node`: `ros2 run as5600_node as5600_node`
+
+Tidak perlu conda deps baru — Linux I2C headers sudah tersedia di kernel.
+
+#### G. Penggunaan
+
+```bash
+# Default — /dev/i2c-1, 10 Hz, 1 encoder
+pixi run as5600-node
+
+# 3 encoder pada bus terpisah, 20 Hz
+source install/setup.bash
+ros2 run as5600_node as5600_node --ros-args \
+  -p i2c_devices:="['/dev/i2c-1', '/dev/i2c-3', '/dev/i2c-4']" \
+  -p publish_rate:=20.0
+
+# Raspberry Pi: enable extra I2C buses via config.txt
+# dtoverlay=i2c-gpio,bus=3,i2c_gpio_sda=17,i2c_gpio_scl=27
+# dtoverlay=i2c-gpio,bus=4,i2c_gpio_sda=22,i2c_gpio_scl=23
+```
+
+### Definition Of Done
+- [x] `src/as5600_node/` berisi `CMakeLists.txt`, `package.xml`, `include/`, `src/`
+- [x] `blockly_interfaces/msg/EncoderRead.msg` terdaftar di `rosidl_generate_interfaces()`
+- [ ] `pixi run build-interfaces` berhasil — EncoderRead.msg ter-generate
+- [ ] `pixi run build-as5600` berhasil di Raspberry Pi (native build) tanpa error
+- [ ] Node berjalan: `pixi run as5600-node` — publish `/encoder/state`
+- [ ] Parameter `i2c_devices`, `publish_rate` berfungsi via `--ros-args -p`
+- [x] Handler `encoder_read` berfungsi di dummy mode (test passes)
+- [x] Blockly block `encoderRead` muncul di toolbox, generate valid JS code
+- [ ] End-to-end: Blockly block → executor (real) → cache `/encoder/state` → return angle

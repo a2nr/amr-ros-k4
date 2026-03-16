@@ -51,3 +51,5 @@ build-gpio       = { cmd = "colcon build --symlink-install --packages-select gpi
 gpio-node        = { cmd = "bash -c 'source install/setup.bash && ros2 run gpio_node gpio_node'", depends-on = ["build-gpio"] }
 build-pca9685    = { cmd = "colcon build --symlink-install --packages-select pca9685_node", depends-on = ["setup-dep", "build-interfaces"] }
 pca9685-node     = { cmd = "bash -c 'source install/setup.bash && ros2 run pca9685_node pca9685_node'", depends-on = ["build-pca9685"] }
+build-as5600     = { cmd = "colcon build --symlink-install --packages-select as5600_node", depends-on = ["setup-dep", "build-interfaces"] }
+as5600-node      = { cmd = "bash -c 'source install/setup.bash && ros2 run as5600_node as5600_node'", depends-on = ["build-as5600"] }
