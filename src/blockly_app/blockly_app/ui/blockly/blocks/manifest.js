@@ -15,4 +15,5 @@ const BLOCK_FILES = [
   'delay.js',
   'pwmWrite.js',
   'encoderRead.js',
+  'odometryRead.js',
 ];

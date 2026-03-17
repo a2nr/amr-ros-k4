@@ -3,7 +3,7 @@
 > **Project**: Blockly ROS2 Robot Controller (Kiwi Wheel AMR)
 > **ROS2 Distro**: Jazzy
 > **Last Updated**: 2026-03-16
-> **Current Focus**: Task #4 — AS5600 Magnetic Encoder (I2C)
+> **Current Focus**: Task #5 — Unified Odometry Interface
 
 Dokumentasi lengkap dapat dilihat di [DOCUMENTATION.md](DOCUMENTATION.md).
 
@@ -257,3 +257,96 @@ ros2 run as5600_node as5600_node --ros-args \
 - [x] Handler `encoder_read` berfungsi di dummy mode (test passes)
 - [x] Blockly block `encoderRead` muncul di toolbox, generate valid JS code
 - [ ] End-to-end: Blockly block → executor (real) → cache `/encoder/state` → return angle
+
+## 5 Enhancement: Unified Odometry Interface — nav_msgs/Odometry : [ ]
+Interface odometry menggunakan standar ROS2 `nav_msgs/Odometry` agar kompatibel dengan ekosistem ROS2. Setiap jenis sensor odometry (encoder, IMU, optical) publish ke topic terpisah `odometry_<type>/odom` menggunakan message type yang sama.
+
+**Motivasi**: Modularitas — tambah sensor baru cukup buat node yang publish `nav_msgs/Odometry` ke `odometry_<type>/odom`. Dari Blockly, user pilih source dan field yang mau dibaca.
+
+**Arsitektur**:
+```
+as5600_node (encoder)     → odometry_encoder/odom  (nav_msgs/Odometry)
+future: imu_node          → odometry_imu/odom      (nav_msgs/Odometry)
+future: optical_node      → odometry_optical/odom   (nav_msgs/Odometry)
+```
+
+**Satuan**: Mengikuti REP-103 kecuali jarak menggunakan **centimeter (cm)** karena rentang pergerakan robot kecil. Angular menggunakan radian.
+
+**Blocker**: Implementasi sensor baru (IMU, optical) menunggu desain mekanik final.
+
+### Implementasi
+
+#### A. Standard Interface — `nav_msgs/Odometry`
+Tidak menggunakan custom message. `nav_msgs/Odometry` sudah tersedia di RoboStack (`ros-jazzy-desktop` dan `ros-jazzy-ros-base`). Message fields yang digunakan:
+- `pose.pose.position.x/y` — posisi robot (cm)
+- `pose.pose.orientation` — quaternion dari heading (2D: z=sin(θ/2), w=cos(θ/2))
+- `twist.twist.linear.x/y` — kecepatan robot (cm/s)
+- `twist.twist.angular.z` — kecepatan angular (rad/s)
+- `header.frame_id` = `"odom"`, `child_frame_id` = `"base_link"`
+
+#### B. AS5600 Node — Kiwi Wheel Kinematics (backward compatible)
+`as5600_node` menghitung robot-level odometry langsung dari 3 encoder menggunakan kiwi wheel forward kinematics, lalu publish ke **dua** topic:
+- `/encoder/state` (`EncoderRead`) — legacy per-wheel angle, backward compat
+- `odometry_encoder/odom` (`nav_msgs/Odometry`) — robot-level pose + twist
+
+**Kiwi Wheel Forward Kinematics** (3 roda @ 120°):
+```
+Constraint: ωᵢ = (1/r)(-vx·sin(αᵢ) + vy·cos(αᵢ) + L·ωz)
+
+Forward kinematics (3 roda → robot velocity):
+vx  = (r/n) · Σ(-ωᵢ·sin(αᵢ))     [cm/s]
+vy  = (r/n) · Σ( ωᵢ·cos(αᵢ))     [cm/s]
+ωz  = r/(n·L) · Σ(ωᵢ)            [rad/s]
+
+Pose integration (Euler):
+x  += (vx·cos(θ) - vy·sin(θ))·dt   [cm]
+y  += (vx·sin(θ) + vy·cos(θ))·dt   [cm]
+θ  += ωz·dt                         [rad]
+```
+
+**Parameter kiwi wheel** (configurable via `--ros-args -p`):
+| Parameter | Type | Default | Keterangan |
+|---|---|---|---|
+| `wheel_radius` | double | 5.0 | Radius roda (cm) — HARUS di-tune |
+| `wheel_distance` | double | 15.0 | Jarak center-to-wheel (cm) — HARUS di-tune |
+| `wheel_angles` | double[] | [0, 2π/3, 4π/3] | Sudut posisi roda (rad) |
+
+#### C. Handler — `odometry.py`
+```python
+@handler("odometry_read")
+def handle_odometry_read(params, hardware):
+    source = params.get("source", "encoder")  # "encoder" | "imu" | "optical"
+    field = params["field"]                     # "x" | "y" | "heading" | "vx" | "vy" | "omega_z"
+```
+Lazy-create subscriber per source ke `odometry_<source>/odom`. Cache robot-level fields dengan quaternion → yaw conversion.
+
+#### D. Blockly Block — `odometryRead.js`
+```
+┌───────────────────────────────────────────────────────────┐
+│ Odometry Read  source: [Encoder ▾]  field: [X (cm) ▾]    │
+└───────────────────────────────────────────────────────────┘
+```
+- **source**: `FieldDropdown` — `Encoder` (extensible: `IMU`, `Optical`)
+- **field**: `FieldDropdown` — `X (cm)`, `Y (cm)`, `Heading (rad)`, `Vel X (cm/s)`, `Vel Y (cm/s)`, `Angular Vel (rad/s)`
+- Returns: `Number`, Category: `Robot`, Command: `odometry_read`
+
+#### E. Backward Compatibility
+- `EncoderRead.msg`, `encoder.py`, `encoderRead.js` tetap ada dan berfungsi
+- Existing test `test_block_encoder.py` tetap pass
+- Saved workspace yang pakai `encoderRead` block tetap bisa di-load
+
+#### F. Future Phases (blocked on mekanik)
+- Sensor nodes baru (`imu_node`, `optical_node`) publish `nav_msgs/Odometry` ke `odometry_<type>/odom`
+- Update `odometryRead.js` dropdown source untuk sensor baru
+- Handler `odometry.py` auto-subscribe ke topic baru via `_SOURCE_TOPICS` dict
+
+### Definition Of Done
+- [x] Interface menggunakan `nav_msgs/Odometry` (bukan custom message)
+- [x] `as5600_node` publish ke `odometry_encoder/odom` dengan kiwi wheel kinematics
+- [x] Parameter `wheel_radius`, `wheel_distance`, `wheel_angles` configurable
+- [ ] `pixi run build-as5600` berhasil — as5600_node compile dengan nav_msgs dependency
+- [x] Handler `odometry_read` berfungsi di dummy mode (test passes)
+- [x] Blockly block `odometryRead` dengan source + field dropdowns
+- [ ] End-to-end: Blockly → executor (real) → cache `odometry_encoder/odom` → return value
+- [x] Backward compat: `encoderRead` block dan `encoder_read` handler tetap berfungsi
+- [x] Integration test `test_block_odometry.py` passes di dummy mode

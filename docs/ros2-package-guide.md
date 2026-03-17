@@ -7,6 +7,7 @@ Every new `ament_python` package under `src/` must follow this structure:
 ```
 src/<package_name>/
 ├── package.xml
+├── readme.md
 ├── setup.py
 ├── setup.cfg
 ├── resource/
