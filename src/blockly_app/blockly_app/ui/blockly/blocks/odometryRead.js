@@ -4,35 +4,25 @@ BlockRegistry.register({
   category: 'Robot',
   categoryColor: '#5b80a5',
   color: '#00897B',
-  tooltip: 'Read robot odometry — position (cm), velocity (cm/s), or heading (rad)',
+  tooltip: 'Fetch all odometry data from source — use with "set variable" block, then extract with getValueOdometry',
 
   definition: {
     init: function () {
       this.appendDummyInput()
-        .appendField('Odometry Read source:')
+        .appendField('getOdometry')
         .appendField(new Blockly.FieldDropdown([
           ['Encoder', 'encoder']
-        ]), 'SOURCE')
-        .appendField('field:')
-        .appendField(new Blockly.FieldDropdown([
-          ['X (cm)', 'x'],
-          ['Y (cm)', 'y'],
-          ['Heading (rad)', 'heading'],
-          ['Vel X (cm/s)', 'vx'],
-          ['Vel Y (cm/s)', 'vy'],
-          ['Angular Vel (rad/s)', 'omega_z']
-        ]), 'FIELD');
-      this.setOutput(true, 'Number');
+        ]), 'SOURCE');
+      this.setOutput(true, null);
       this.setColour('#00897B');
-      this.setTooltip('Read robot odometry — position (cm), velocity (cm/s), or heading (rad)');
+      this.setTooltip('Fetch all odometry data (x, y, heading, vx, vy, omega_z) from source');
     }
   },
 
   generator: function (block) {
     var source = block.getFieldValue('SOURCE');
-    var field = block.getFieldValue('FIELD');
     var code =
-      'parseFloat((await executeAction(\'odometry_read\', { source: \'' + source + '\', field: \'' + field + '\' })).message)';
+      'JSON.parse((await executeAction(\'odometry_read\', { source: \'' + source + '\' })).message)';
     return [code, Blockly.JavaScript.ORDER_AWAIT];
   }
 });

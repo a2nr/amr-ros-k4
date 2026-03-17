@@ -14,6 +14,6 @@ const BLOCK_FILES = [
   'digitalIn.js',
   'delay.js',
   'pwmWrite.js',
-  'encoderRead.js',
   'odometryRead.js',
+  'odometryGet.js',
 ];

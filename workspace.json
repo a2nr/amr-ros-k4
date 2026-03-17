@@ -5,23 +5,20 @@
       {
         "type": "main_program",
         "id": "COLVqmFP{j*XNMc.9rz+",
-        "x": 210,
-        "y": 190,
+        "x": -50,
+        "y": -30,
         "inputs": {
           "BODY": {
             "block": {
-              "type": "controls_whileUntil",
-              "id": "UZH|b`4F=4X`zYjNW9zL",
-              "fields": {
-                "MODE": "WHILE"
-              },
+              "type": "controls_repeat_ext",
+              "id": "l?jsj;kx|7.`vK%OX$hB",
               "inputs": {
-                "BOOL": {
-                  "block": {
-                    "type": "logic_boolean",
-                    "id": "nsD(~e:hYj[+9m-)yu-4",
+                "TIMES": {
+                  "shadow": {
+                    "type": "math_number",
+                    "id": "|BZr(3i5I3Fv=SLR#wy$",
                     "fields": {
-                      "BOOL": "TRUE"
+                      "NUM": 1
                     }
                   }
                 },
@@ -63,6 +60,139 @@
                         "id": "IXp?_lac7+V*GG!lW{]0",
                         "fields": {
                           "DURATION_MS": 1000
+                        },
+                        "next": {
+                          "block": {
+                            "type": "variables_set",
+                            "id": ",tz/Zq,NX|Jd6V+|dDl{",
+                            "fields": {
+                              "VAR": {
+                                "id": "C_:{ED@bJimgLzEmC6(`"
+                              }
+                            },
+                            "inputs": {
+                              "VALUE": {
+                                "block": {
+                                  "type": "digitalIn",
+                                  "id": "DJpFh.6H~L9fX2V4SDJd",
+                                  "fields": {
+                                    "GPIO": 16
+                                  }
+                                }
+                              }
+                            },
+                            "next": {
+                              "block": {
+                                "type": "delay",
+                                "id": "VQy`Sl3]ey49sP%+N6$R",
+                                "fields": {
+                                  "DURATION_MS": 500
+                                },
+                                "next": {
+                                  "block": {
+                                    "type": "variables_set",
+                                    "id": "i|LkDgVjImZd2}owndlz",
+                                    "fields": {
+                                      "VAR": {
+                                        "id": "[g,f6Mp!O$eZPCFs0U[H"
+                                      }
+                                    },
+                                    "inputs": {
+                                      "VALUE": {
+                                        "block": {
+                                          "type": "math_number",
+                                          "id": "[C@fwlekugl(`pi1b;1(",
+                                          "fields": {
+                                            "NUM": 100
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "next": {
+                                      "block": {
+                                        "type": "pwmWrite",
+                                        "id": "Ezn#r.|lvDj5{Q1-C:E$",
+                                        "fields": {
+                                          "ADDRESS": "64",
+                                          "CHANNEL": 0
+                                        },
+                                        "inputs": {
+                                          "PWM_VALUE": {
+                                            "block": {
+                                              "type": "variables_get",
+                                              "id": "OkA-}PRPzgi;[I)@vcG$",
+                                              "fields": {
+                                                "VAR": {
+                                                  "id": "[g,f6Mp!O$eZPCFs0U[H"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        "next": {
+                                          "block": {
+                                            "type": "variables_set",
+                                            "id": "m{+MhlXz-1tpl`mPPBh5",
+                                            "fields": {
+                                              "VAR": {
+                                                "id": "ju{xs[rjZumqS87$0nhu"
+                                              }
+                                            },
+                                            "inputs": {
+                                              "VALUE": {
+                                                "block": {
+                                                  "type": "odometryRead",
+                                                  "id": "v=Js89HC8D0UUA.-pN[q",
+                                                  "fields": {
+                                                    "SOURCE": "encoder"
+                                                  }
+                                                }
+                                              }
+                                            },
+                                            "next": {
+                                              "block": {
+                                                "type": "variables_set",
+                                                "id": "]LcUOwlc-y=`.e?EVgTa",
+                                                "fields": {
+                                                  "VAR": {
+                                                    "id": "Ug!mIa*[PnsL?H#9Ar*G"
+                                                  }
+                                                },
+                                                "inputs": {
+                                                  "VALUE": {
+                                                    "block": {
+                                                      "type": "odometryGet",
+                                                      "id": "VG2Q/8?zcyU}s4!W;V/M",
+                                                      "fields": {
+                                                        "FIELD": "x"
+                                                      },
+                                                      "inputs": {
+                                                        "VAR": {
+                                                          "block": {
+                                                            "type": "variables_get",
+                                                            "id": "^AW6|z21?ycRyzJ2y5u9",
+                                                            "fields": {
+                                                              "VAR": {
+                                                                "id": "ju{xs[rjZumqS87$0nhu"
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
                         }
                       }
                     }
@@ -76,8 +206,8 @@
       {
         "type": "procedures_defreturn",
         "id": "4W(2:w1NGV^I;j6@^_I|",
-        "x": 630,
-        "y": 210,
+        "x": 330,
+        "y": -30,
         "extraState": {
           "params": [
             {
@@ -146,6 +276,22 @@
     {
       "name": "logic",
       "id": "-HsGyh[-?q^.O;|%cRw="
+    },
+    {
+      "name": "pinIn",
+      "id": "C_:{ED@bJimgLzEmC6(`"
+    },
+    {
+      "name": "pwm1",
+      "id": "[g,f6Mp!O$eZPCFs0U[H"
+    },
+    {
+      "name": "odometry",
+      "id": "ju{xs[rjZumqS87$0nhu"
+    },
+    {
+      "name": "valX",
+      "id": "Ug!mIa*[PnsL?H#9Ar*G"
     }
   ]
 }

@@ -155,19 +155,21 @@ i2cdetect -y 1          # scan device di bus 1 (perlu i2c-tools)
 - [ ] End-to-end: Blockly block → executor (real) → `/pwm/write` → pca9685_node → I2C write
 
 ## 4 Enhancement: AS5600 — 12-bit Magnetic Rotary Encoder (I2C) : [ ]
-AS5600 adalah 12-bit magnetic rotary position sensor via I2C. Kiwi wheel AMR menggunakan 3 encoder (satu per roda) untuk feedback posisi. AS5600 memiliki **fixed I2C address (0x36)** — untuk 3 module, setiap encoder menggunakan **I2C bus terpisah** (e.g., `/dev/i2c-1`, `/dev/i2c-3`, `/dev/i2c-4`). Node ini publisher — membaca angle secara periodik dan publish ke ROS2 topic.
+AS5600 adalah 12-bit magnetic rotary position sensor via I2C. Kiwi wheel AMR menggunakan 3 encoder (satu per roda) untuk feedback posisi. AS5600 memiliki **fixed I2C address (0x36)** — untuk 3 module, setiap encoder menggunakan **I2C bus terpisah** (e.g., `/dev/i2c-1`, `/dev/i2c-3`, `/dev/i2c-4`).
+
+> **Note**: Legacy `EncoderRead.msg`, `encoder.py` handler, dan `encoderRead.js` block telah dihapus dan diganti oleh **Task #5 (Unified Odometry Interface)**. `as5600_node` sekarang hanya publish `nav_msgs/Odometry` ke `odometry_encoder/odom`.
 
 ### Implementasi
 
 #### A. Package Structure (C++, ament_cmake)
 ```
 src/as5600_node/
-├── CMakeLists.txt              # ament_cmake — NO external lib dependency
-├── package.xml                 # depend: rclcpp, blockly_interfaces
+├── CMakeLists.txt              # ament_cmake — depend: rclcpp, nav_msgs, geometry_msgs
+├── package.xml
 ├── include/as5600_node/
-│   └── as5600_node.hpp         # As5600Node class + I2C helpers
+│   └── as5600_node.hpp         # As5600Node class + kinematics + I2C helpers
 └── src/
-    ├── as5600_node.cpp          # I2C init, timer_callback, read_raw_angle()
+    ├── as5600_node.cpp          # I2C read + kiwi wheel kinematics + nav_msgs publish
     └── main.cpp                 # rclcpp::spin(node)
 ```
 
@@ -175,93 +177,49 @@ Hardware interface menggunakan Linux I2C (`/dev/i2c-X`) via `ioctl()` — tidak 
 
 #### B. ROS2 Interface
 
-**New message** — `blockly_interfaces/msg/EncoderRead.msg`:
-```
-uint8 encoder_id       # Encoder index (0, 1, 2, ...)
-float32 angle          # Angle in degrees (0.0-360.0)
-uint16 raw_angle       # Raw 12-bit value (0-4095)
-```
+Menggunakan **`nav_msgs/Odometry`** (standar ROS2) — lihat Task #5 untuk detail fields dan kinematics.
 
-**Topic**: `/encoder/state` (as5600_node → executor)
+**Topic**: `odometry_encoder/odom` (as5600_node → executor)
 
 **ROS2 Parameters** (configurable via `--ros-args -p`):
 | Parameter | Type | Default | Fungsi |
 |---|---|---|---|
 | `i2c_devices` | string[] | `["/dev/i2c-1"]` | List of I2C device paths, satu per encoder |
 | `publish_rate` | double | 10.0 | Publish frequency Hz |
+| `wheel_radius` | double | 5.0 | Radius roda (cm) — HARUS di-tune |
+| `wheel_distance` | double | 15.0 | Jarak center-to-wheel (cm) — HARUS di-tune |
+| `wheel_angles` | double[] | [0, 2π/3, 4π/3] | Sudut posisi roda (rad) |
 
-#### C. Node Behavior — `As5600Node`
-1. **Constructor**: open setiap I2C bus, set slave address 0x36 via `ioctl(I2C_SLAVE)`, create publisher dan timer
-2. **Timer callback**: iterate semua I2C fds → read 2-byte RAW_ANGLE register → compute `angle = raw * 360.0 / 4096.0` → publish EncoderRead
-3. **`read_raw_angle(fd)`**: write register address 0x0C, read 2 bytes → `((buf[0] & 0x0F) << 8) | buf[1]` (12-bit)
-4. **Multi-bus support**: satu node mengontrol semua encoder — setiap fd dedicated ke satu bus/encoder
-5. **Cleanup**: close semua file descriptors di destructor
-
-AS5600 register map:
-| Register | Address | Fungsi |
-|---|---|---|
-| RAW_ANGLE | 0x0C-0x0D | 12-bit raw angle (0-4095) |
-| STATUS | 0x0B | Magnet detect status |
-| AGC | 0x1A | Automatic gain control |
-
-#### D. Handler — `blockly_executor/handlers/encoder.py`
-```python
-@handler("encoder_read")
-def handle_encoder_read(params, hardware):
-    encoder_id = int(params["encoder_id"])
-    # Dummy: return "0.0". Real: subscribe /encoder/state, return cached angle
-```
-Lazy-create subscriber dengan cache `{encoder_id: {angle, raw_angle}}`, sama dengan pola `digital_in` di `gpio.py`.
-
-#### E. Blockly Block — `encoderRead.js`
-```
-┌──────────────────────────────────────┐
-│ Encoder Read  id: [0]                │
-└──────────────────────────────────────┘
-```
-- **id**: `FieldNumber` (0–2)
-- Returns: `Number` (angle 0-360)
-- Category: `Robot`, Command: `encoder_read`
-- Output block (can be used in expressions, e.g., `set variable to [Encoder Read id: 0]`)
-
-#### F. pixi.toml Changes
+#### C. pixi.toml
 - `build-as5600`: `colcon build --packages-select as5600_node` (depends-on: setup-dep, build-interfaces)
 - `as5600-node`: `ros2 run as5600_node as5600_node`
 
-Tidak perlu conda deps baru — Linux I2C headers sudah tersedia di kernel.
-
-#### G. Penggunaan
+#### D. Penggunaan
 
 ```bash
 # Default — /dev/i2c-1, 10 Hz, 1 encoder
 pixi run as5600-node
 
-# 3 encoder pada bus terpisah, 20 Hz
+# 3 encoder pada bus terpisah, 20 Hz, custom wheel geometry
 source install/setup.bash
 ros2 run as5600_node as5600_node --ros-args \
   -p i2c_devices:="['/dev/i2c-1', '/dev/i2c-3', '/dev/i2c-4']" \
-  -p publish_rate:=20.0
-
-# Raspberry Pi: enable extra I2C buses via config.txt
-# dtoverlay=i2c-gpio,bus=3,i2c_gpio_sda=17,i2c_gpio_scl=27
-# dtoverlay=i2c-gpio,bus=4,i2c_gpio_sda=22,i2c_gpio_scl=23
+  -p publish_rate:=20.0 \
+  -p wheel_radius:=5.0 \
+  -p wheel_distance:=15.0
 ```
 
 ### Definition Of Done
 - [x] `src/as5600_node/` berisi `CMakeLists.txt`, `package.xml`, `include/`, `src/`
-- [x] `blockly_interfaces/msg/EncoderRead.msg` terdaftar di `rosidl_generate_interfaces()`
-- [ ] `pixi run build-interfaces` berhasil — EncoderRead.msg ter-generate
 - [ ] `pixi run build-as5600` berhasil di Raspberry Pi (native build) tanpa error
-- [ ] Node berjalan: `pixi run as5600-node` — publish `/encoder/state`
-- [ ] Parameter `i2c_devices`, `publish_rate` berfungsi via `--ros-args -p`
-- [x] Handler `encoder_read` berfungsi di dummy mode (test passes)
-- [x] Blockly block `encoderRead` muncul di toolbox, generate valid JS code
-- [ ] End-to-end: Blockly block → executor (real) → cache `/encoder/state` → return angle
+- [ ] Node berjalan: `pixi run as5600-node` — publish `odometry_encoder/odom`
+- [ ] Parameter `i2c_devices`, `publish_rate`, `wheel_radius`, `wheel_distance` berfungsi via `--ros-args -p`
+- [ ] End-to-end: as5600_node → `odometry_encoder/odom` → executor cache → Blockly
 
 ## 5 Enhancement: Unified Odometry Interface — nav_msgs/Odometry : [ ]
 Interface odometry menggunakan standar ROS2 `nav_msgs/Odometry` agar kompatibel dengan ekosistem ROS2. Setiap jenis sensor odometry (encoder, IMU, optical) publish ke topic terpisah `odometry_<type>/odom` menggunakan message type yang sama.
 
-**Motivasi**: Modularitas — tambah sensor baru cukup buat node yang publish `nav_msgs/Odometry` ke `odometry_<type>/odom`. Dari Blockly, user pilih source dan field yang mau dibaca.
+**Motivasi**: Modularitas — tambah sensor baru cukup buat node yang publish `nav_msgs/Odometry` ke `odometry_<type>/odom`. Dari Blockly, user pilih source via dropdown.
 
 **Arsitektur**:
 ```
@@ -277,17 +235,17 @@ future: optical_node      → odometry_optical/odom   (nav_msgs/Odometry)
 ### Implementasi
 
 #### A. Standard Interface — `nav_msgs/Odometry`
-Tidak menggunakan custom message. `nav_msgs/Odometry` sudah tersedia di RoboStack (`ros-jazzy-desktop` dan `ros-jazzy-ros-base`). Message fields yang digunakan:
+Tidak menggunakan custom message. `nav_msgs/Odometry` sudah tersedia di RoboStack. Message fields yang digunakan:
 - `pose.pose.position.x/y` — posisi robot (cm)
 - `pose.pose.orientation` — quaternion dari heading (2D: z=sin(θ/2), w=cos(θ/2))
 - `twist.twist.linear.x/y` — kecepatan robot (cm/s)
 - `twist.twist.angular.z` — kecepatan angular (rad/s)
 - `header.frame_id` = `"odom"`, `child_frame_id` = `"base_link"`
 
-#### B. AS5600 Node — Kiwi Wheel Kinematics (backward compatible)
-`as5600_node` menghitung robot-level odometry langsung dari 3 encoder menggunakan kiwi wheel forward kinematics, lalu publish ke **dua** topic:
-- `/encoder/state` (`EncoderRead`) — legacy per-wheel angle, backward compat
-- `odometry_encoder/odom` (`nav_msgs/Odometry`) — robot-level pose + twist
+#### B. AS5600 Node — Kiwi Wheel Kinematics
+`as5600_node` menghitung robot-level odometry langsung dari 3 encoder menggunakan kiwi wheel forward kinematics, publish ke `odometry_encoder/odom` (`nav_msgs/Odometry`).
+
+Legacy `EncoderRead.msg` dan `/encoder/state` topic telah dihapus — clean break, hanya `nav_msgs/Odometry`.
 
 **Kiwi Wheel Forward Kinematics** (3 roda @ 120°):
 ```
@@ -304,38 +262,38 @@ y  += (vx·sin(θ) + vy·cos(θ))·dt   [cm]
 θ  += ωz·dt                         [rad]
 ```
 
-**Parameter kiwi wheel** (configurable via `--ros-args -p`):
-| Parameter | Type | Default | Keterangan |
-|---|---|---|---|
-| `wheel_radius` | double | 5.0 | Radius roda (cm) — HARUS di-tune |
-| `wheel_distance` | double | 15.0 | Jarak center-to-wheel (cm) — HARUS di-tune |
-| `wheel_angles` | double[] | [0, 2π/3, 4π/3] | Sudut posisi roda (rad) |
-
-#### C. Handler — `odometry.py`
+#### C. Handler — `odometry.py` (returns JSON)
 ```python
 @handler("odometry_read")
 def handle_odometry_read(params, hardware):
-    source = params.get("source", "encoder")  # "encoder" | "imu" | "optical"
-    field = params["field"]                     # "x" | "y" | "heading" | "vx" | "vy" | "omega_z"
+    source = params.get("source", "encoder")
+    # Returns ALL fields as JSON: {"x":0.0, "y":0.0, "heading":0.0, "vx":0.0, "vy":0.0, "omega_z":0.0}
 ```
-Lazy-create subscriber per source ke `odometry_<source>/odom`. Cache robot-level fields dengan quaternion → yaw conversion.
+Lazy-create subscriber per source ke `odometry_<source>/odom`. Satu action call return semua data sekaligus — efisien, tidak perlu action call per-field.
 
-#### D. Blockly Block — `odometryRead.js`
+#### D. Blockly Blocks — Fetch Once, Extract Many
+Dua block terpisah untuk efisiensi (1 action call untuk semua field):
+
+**Block 1: `getOdometry`** (`odometryRead.js`) — Value block, fetch all data:
 ```
-┌───────────────────────────────────────────────────────────┐
-│ Odometry Read  source: [Encoder ▾]  field: [X (cm) ▾]    │
-└───────────────────────────────────────────────────────────┘
+┌─────────────────────────────────┐
+│ getOdometry [Encoder ▾]         │ → output: Object
+└─────────────────────────────────┘
 ```
-- **source**: `FieldDropdown` — `Encoder` (extensible: `IMU`, `Optical`)
-- **field**: `FieldDropdown` — `X (cm)`, `Y (cm)`, `Heading (rad)`, `Vel X (cm/s)`, `Vel Y (cm/s)`, `Angular Vel (rad/s)`
-- Returns: `Number`, Category: `Robot`, Command: `odometry_read`
+Digunakan dengan Blockly built-in "set variable to" block:
+```
+set [odom ▾] to [getOdometry [Encoder ▾]]    ← 1 action call
+```
 
-#### E. Backward Compatibility
-- `EncoderRead.msg`, `encoder.py`, `encoderRead.js` tetap ada dan berfungsi
-- Existing test `test_block_encoder.py` tetap pass
-- Saved workspace yang pakai `encoderRead` block tetap bisa di-load
+**Block 2: `getValueOdometry`** (`odometryGet.js`) — Value block, extract field (no action call):
+```
+┌───────────────────────────────────────────────┐
+│ getValueOdometry [X (cm) ▾] from [odom ▾]     │ → output: Number
+└───────────────────────────────────────────────┘
+```
+Fields: `X (cm)`, `Y (cm)`, `Heading (rad)`, `Vel X (cm/s)`, `Vel Y (cm/s)`, `Angular Vel (rad/s)`
 
-#### F. Future Phases (blocked on mekanik)
+#### E. Future Phases (blocked on mekanik)
 - Sensor nodes baru (`imu_node`, `optical_node`) publish `nav_msgs/Odometry` ke `odometry_<type>/odom`
 - Update `odometryRead.js` dropdown source untuk sensor baru
 - Handler `odometry.py` auto-subscribe ke topic baru via `_SOURCE_TOPICS` dict
@@ -343,10 +301,10 @@ Lazy-create subscriber per source ke `odometry_<source>/odom`. Cache robot-level
 ### Definition Of Done
 - [x] Interface menggunakan `nav_msgs/Odometry` (bukan custom message)
 - [x] `as5600_node` publish ke `odometry_encoder/odom` dengan kiwi wheel kinematics
-- [x] Parameter `wheel_radius`, `wheel_distance`, `wheel_angles` configurable
+- [x] Legacy `EncoderRead.msg`, `encoder.py`, `encoderRead.js` dihapus — clean break
+- [x] Handler `odometry_read` return JSON semua fields (bukan per-field)
+- [x] Blockly: `getOdometry` (fetch) + `getValueOdometry` (extract) — 1 action call
 - [ ] `pixi run build-as5600` berhasil — as5600_node compile dengan nav_msgs dependency
 - [x] Handler `odometry_read` berfungsi di dummy mode (test passes)
-- [x] Blockly block `odometryRead` dengan source + field dropdowns
-- [ ] End-to-end: Blockly → executor (real) → cache `odometry_encoder/odom` → return value
-- [x] Backward compat: `encoderRead` block dan `encoder_read` handler tetap berfungsi
+- [ ] End-to-end: Blockly → executor (real) → cache `odometry_encoder/odom` → return JSON
 - [x] Integration test `test_block_odometry.py` passes di dummy mode

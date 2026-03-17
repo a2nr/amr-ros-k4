@@ -7,6 +7,7 @@ Real mode communication:
 Units: cm for position, cm/s for velocity, rad for heading, rad/s for angular velocity.
 """
 
+import json
 import math
 import threading
 
@@ -31,11 +32,7 @@ def _get_odometry_subscriber(hardware: Hardware, source: str):
 
     Each source gets its own subscription and cache entry.
     """
-    cache_attr = "_odometry_cache"
-    lock_attr = "_odometry_lock"
-    subs_attr = "_odometry_subs"
-
-    if not hasattr(hardware.node, cache_attr):
+    if not hasattr(hardware.node, "_odometry_cache"):
         hardware.node._odometry_cache = {}
         hardware.node._odometry_lock = threading.Lock()
         hardware.node._odometry_subs = {}
@@ -69,19 +66,16 @@ def handle_odometry_read(
     params: dict[str, str], hardware: Hardware
 ) -> tuple[bool, str]:
     source = params.get("source", "encoder")
-    field = params["field"]
-    hardware.log(f"odometry_read(source={source}, field={field})")
+    hardware.log(f"odometry_read(source={source})")
+
+    data = {"x": 0.0, "y": 0.0, "heading": 0.0, "vx": 0.0, "vy": 0.0, "omega_z": 0.0}
 
     if hardware.is_real():
         cache = _get_odometry_subscriber(hardware, source)
         with hardware.node._odometry_lock:
-            data = cache.get(source)
+            cached = cache.get(source)
 
-        if data is None:
-            return (True, "0.0")
+        if cached is not None:
+            data = cached
 
-        value = data.get(field, 0.0)
-        return (True, str(value))
-
-    # Dummy mode — return 0.0
-    return (True, "0.0")
+    return (True, json.dumps(data))

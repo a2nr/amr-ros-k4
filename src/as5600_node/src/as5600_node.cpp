@@ -37,10 +37,6 @@ As5600Node::As5600Node()
   // Initialize velocity computation state
   prev_angle_rad_.resize(i2c_fds_.size(), 0.0);
 
-  // Create legacy publisher for /encoder/state (backward compat)
-  encoder_pub_ = this->create_publisher<blockly_interfaces::msg::EncoderRead>(
-    "/encoder/state", 10);
-
   // Create odometry publisher on odometry_encoder/odom (nav_msgs/Odometry)
   odom_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(
     "odometry_encoder/odom", 10);
@@ -145,13 +141,6 @@ void As5600Node::timer_callback()
       wheel_velocities[i] = delta / dt_;
     }
     prev_angle_rad_[i] = angle_rad;
-
-    // Legacy: publish EncoderRead on /encoder/state (backward compat)
-    blockly_interfaces::msg::EncoderRead enc_msg;
-    enc_msg.encoder_id = static_cast<uint8_t>(i);
-    enc_msg.raw_angle = raw;
-    enc_msg.angle = static_cast<float>(raw) * 360.0f / 4096.0f;
-    encoder_pub_->publish(enc_msg);
   }
 
   if (first_reading_) {

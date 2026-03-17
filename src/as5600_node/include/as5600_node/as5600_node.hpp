@@ -7,7 +7,6 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "blockly_interfaces/msg/encoder_read.hpp"
 #include <nav_msgs/msg/odometry.hpp>
 
 class As5600Node : public rclcpp::Node
@@ -34,8 +33,6 @@ private:
   // STATUS register bit masks
   static constexpr uint8_t STATUS_MD = 0x20;  // Magnet Detected
 
-  // Legacy publisher (EncoderRead on /encoder/state)
-  rclcpp::Publisher<blockly_interfaces::msg::EncoderRead>::SharedPtr encoder_pub_;
   // Odometry publisher (nav_msgs/Odometry on odometry_encoder/odom)
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
   rclcpp::TimerBase::SharedPtr read_timer_;

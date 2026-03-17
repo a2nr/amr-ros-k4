@@ -8,7 +8,6 @@ endif()
 # ROS2 dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(blockly_interfaces REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 
@@ -24,7 +23,6 @@ target_include_directories(as5600_node PUBLIC
 
 ament_target_dependencies(as5600_node
   rclcpp
-  blockly_interfaces
   nav_msgs
   geometry_msgs
 )

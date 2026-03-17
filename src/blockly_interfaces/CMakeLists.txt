@@ -9,7 +9,6 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/GpioWrite.msg"
   "msg/GpioRead.msg"
   "msg/PwmWrite.msg"
-  "msg/EncoderRead.msg"
 )
 
 ament_export_dependencies(rosidl_default_runtime)
