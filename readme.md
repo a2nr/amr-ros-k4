@@ -36,7 +36,7 @@ jelaskan apa yang dimaksut untuk menyelesaikan task
 
 # Potential Enhancements
 this list is short by priority
-- **Blockly UI Enhancement**: Lets make Human Interface in same view to help me monitoring node that needed. it programaticaly using block is real good, you can take labview interface as refrence. you can separated program as main_program to handle human interface.
+- **Blockly UI Enhancement**: Lets make Human Interface in same view to help me monitoring node that needed. it programaticaly using block is real good, you can take labview interface as refrence. you can separated program as main_program to handle human interface. also implement print console and string for debuging.
 - **Feasibility Study to implement Controller**: mobile robot need controller to move flawlesly.
 - **Launch files**: ROS2 launch files to start all nodes with one command includ node in raspberry pi
 - **Simulation**: Integrate with Gazebo/Isaac Sim for testing Kiwi Wheel kinematics before deploying to hardware
@@ -147,7 +147,7 @@ i2cdetect -y 1          # scan device di bus 1 (perlu i2c-tools)
 - [x] `src/pca9685_node/` berisi `CMakeLists.txt`, `package.xml`, `include/`, `src/`
 - [x] `blockly_interfaces/msg/PwmWrite.msg` terdaftar di `rosidl_generate_interfaces()`
 - [x] `pixi run build-interfaces` berhasil — PwmWrite.msg ter-generate
-- [ ] `pixi run build-pca9685` berhasil di Raspberry Pi (native build) tanpa error
+- [x] `pixi run build-pca9685` berhasil di Raspberry Pi (native build) tanpa error
 - [ ] Node berjalan: `pixi run pca9685-node` — subscribe `/pwm/write`
 - [ ] Parameter `i2c_device`, `frequency` berfungsi via `--ros-args -p`
 - [x] Handler `pwm_write` berfungsi di dummy mode (test passes)
@@ -211,7 +211,7 @@ ros2 run as5600_node as5600_node --ros-args \
 
 ### Definition Of Done
 - [x] `src/as5600_node/` berisi `CMakeLists.txt`, `package.xml`, `include/`, `src/`
-- [ ] `pixi run build-as5600` berhasil di Raspberry Pi (native build) tanpa error
+- [x] `pixi run build-as5600` berhasil di Raspberry Pi (native build) tanpa error
 - [ ] Node berjalan: `pixi run as5600-node` — publish `odometry_encoder/odom`
 - [ ] Parameter `i2c_devices`, `publish_rate`, `wheel_radius`, `wheel_distance` berfungsi via `--ros-args -p`
 - [ ] End-to-end: as5600_node → `odometry_encoder/odom` → executor cache → Blockly
@@ -304,7 +304,7 @@ Fields: `X (cm)`, `Y (cm)`, `Heading (rad)`, `Vel X (cm/s)`, `Vel Y (cm/s)`, `An
 - [x] Legacy `EncoderRead.msg`, `encoder.py`, `encoderRead.js` dihapus — clean break
 - [x] Handler `odometry_read` return JSON semua fields (bukan per-field)
 - [x] Blockly: `getOdometry` (fetch) + `getValueOdometry` (extract) — 1 action call
-- [ ] `pixi run build-as5600` berhasil — as5600_node compile dengan nav_msgs dependency
+- [x] `pixi run build-as5600` berhasil — as5600_node compile dengan nav_msgs dependency
 - [x] Handler `odometry_read` berfungsi di dummy mode (test passes)
 - [ ] End-to-end: Blockly → executor (real) → cache `odometry_encoder/odom` → return JSON
 - [x] Integration test `test_block_odometry.py` passes di dummy mode
