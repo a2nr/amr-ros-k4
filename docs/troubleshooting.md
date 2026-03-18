@@ -100,4 +100,36 @@ See [`_native_save_dialog()`](src/blockly_app/blockly_app/app.py:29) in `app.py`
 
 **Solution:** Tambah `_reconcile()` dengan 100ms debounce setelah setiap workspace event. Fungsi ini compare HMI blocks di workspace vs `_blockToWidget` map, hapus widget orphan, tambah widget yang belum ter-track. File: `core/hmi-preview.js`.
 
+### UI freeze pada `while(true)` loop di Main Program (polling HMI controls)
+
+**Symptom:** Main Program dengan `while(true)` untuk polling `HMI.getButton()` → seluruh UI freeze, HMI panel tidak update, tombol Stop tidak responsif.
+
+**Cause:** `highlightBlock` override hanya yield ke microtask queue. Microtask tidak memberi giliran ke macrotask queue (click events, setTimeout, requestAnimationFrame).
+
+**Solution:** Tambahkan periodic yield ke macrotask queue (~60Hz) di `highlightBlock` override. Setiap 16ms, `setTimeout(r, 0)` memaksa browser memproses macrotask. Diterapkan di `_runConcurrent()` dan `_runSingle()`. File: `core/debug-engine.js`.
+
+### HMI Button `getButton()` selalu return `false` meskipun sudah diklik
+
+**Symptom:** `while(getButton()!= true) {delay(500);}` tidak pernah keluar dari loop.
+
+**Cause:** HMI loop (~20Hz) memanggil `setButton()` → `_scheduleRender()` → `_render()` menghancurkan DOM button lama dan membuat baru setiap ~50ms. Event `click` butuh mousedown+mouseup pada elemen DOM yang sama — karena DOM diganti mid-click, `click` event tidak pernah fire.
+
+**Solution:** Ganti `click` → `pointerdown` di `_renderButton()`. `pointerdown` fire langsung saat ditekan tanpa menunggu mouseup. File: `core/hmi-manager.js`.
+
+### HMI Switch/Slider tidak bisa di-toggle/drag — selalu reset ke initial value
+
+**Symptom:** `setSwitch('Switch1', Boolean(led))` dalam HMI loop menimpa user toggle setiap ~50ms. Slider juga reset ke 0 setelah user release.
+
+**Cause:** HMI loop berjalan 10x lebih cepat dari Main Program. `setSwitch()` langsung overwrite `widget.state`, dan `setSlider()` overwrite `_userValue` segera setelah `_userInteracting = false` (mouseup).
+
+**Solution:** User interaction tracking — state user disimpan terpisah dari programmatic state. Switch: `_userState` field, tidak ditimpa oleh `setSwitch()`. Slider: `_userHasInteracted` flag persist setelah release, mencegah `setSlider()` overwrite `_userValue`. File: `core/hmi-manager.js`.
+
+### Dua HMI block dengan nama sama hanya membuat satu widget
+
+**Symptom:** Drag dua block `HMI LED` dari toolbox → hanya satu widget muncul di panel (keduanya default ke `LED1`).
+
+**Cause:** `_widgets` Map menggunakan nama sebagai key. Block kedua dengan nama sama hanya update widget yang ada, bukan membuat baru.
+
+**Solution:** Auto-increment nama di `_handleCreate()` — jika `LED1` sudah dipakai, block baru otomatis menjadi `LED2`. Block field di-update via `setFieldValue()`. Juga fix `_handleDelete()` untuk tidak menghapus widget jika block lain masih menggunakan nama yang sama. File: `core/hmi-preview.js`.
+
 ---

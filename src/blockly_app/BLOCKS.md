@@ -1045,6 +1045,46 @@ generator: function (block) {
 5. Add to `manifest.js`
 6. Add entry to `HMI_BLOCK_TYPES` in `core/hmi-preview.js` for design-time preview
 
+#### HMI Control Blocks (interactive — SET + GET pair)
+
+Control widgets (Button, Slider, Switch) have both a **SET block** (statement, create/configure) and a **GET block** (value, read user interaction). User interaction state is tracked separately from programmatic state to prevent HMI loop overwrites.
+
+**HMI Button GET block** (value, latch-until-read):
+
+```js
+generator: function (block) {
+    var name = block.getFieldValue('NAME');
+    return ['HMI.getButton(\'' + name + '\')', Blockly.JavaScript.ORDER_FUNCTION_CALL];
+    // Returns Boolean — true once per click, then auto-resets to false
+},
+```
+
+**HMI Slider GET block** (value, user-drag tracking):
+
+```js
+generator: function (block) {
+    var name = block.getFieldValue('NAME');
+    return ['HMI.getSlider(\'' + name + '\')', Blockly.JavaScript.ORDER_FUNCTION_CALL];
+    // Returns Number — user-dragged value takes priority over programmatic setSlider()
+},
+```
+
+**HMI Switch GET block** (value, user-toggle tracking):
+
+```js
+generator: function (block) {
+    var name = block.getFieldValue('NAME');
+    return ['HMI.getSwitch(\'' + name + '\')', Blockly.JavaScript.ORDER_FUNCTION_CALL];
+    // Returns Boolean — user-toggled state takes priority over programmatic setSwitch()
+},
+```
+
+**User interaction tracking pattern:**
+- **Button**: `pointerdown` event → `widget._pressed = true`. `getButton()` reads and resets (latch).
+- **Slider**: `_userHasInteracted` flag persists after drag release. `setSlider()` skips `_userValue` overwrite once user has interacted.
+- **Switch**: `_userState` stores user toggle separately. `setSwitch()` skips re-render once `_userState` is set.
+- **Design-time**: `hmi-preview.js` auto-increments widget names when duplicate blocks are placed (`LED1` → `LED2`).
+
 ---
 
 ### 7.17 Block Type Overview — All Categories
@@ -1053,7 +1093,7 @@ generator: function (block) {
 |----------|--------|-----------------|
 | **Program** | `main_program`, `main_hmi_program`, `print` | Entry points / client-side |
 | **Robot** | `digitalOut`, `digitalIn`, `delay`, `pwmWrite`, `odometryRead`, `odometryGet` | ROS2 action (except `odometryGet`) |
-| **HMI** | `hmiSetLed`, `hmiSetNumber`, `hmiSetText`, `hmiSetGauge` | Client-side (`HMI.set*()`) |
+| **HMI** | `hmiSetLed`, `hmiSetNumber`, `hmiSetText`, `hmiSetGauge`, `hmiSetButton`, `hmiGetButton`, `hmiSetSlider`, `hmiGetSlider`, `hmiSetSwitch`, `hmiGetSwitch` | Client-side (`HMI.set*()`/`HMI.get*()`) |
 | **Logic** | `controls_if`, `logic_compare`, `logic_operation`, `logic_boolean` | Built-in Blockly |
 | **Loops** | `controls_repeat_ext`, `controls_whileUntil` | Built-in Blockly |
 | **Math** | `math_number`, `math_arithmetic` | Built-in Blockly |

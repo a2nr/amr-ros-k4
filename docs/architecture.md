@@ -120,7 +120,7 @@ This interface is **generic by design** — adding new commands never requires m
 
 ### 2.4 HMI Panel — LabVIEW-style Front Panel
 
-Terinspirasi oleh LabVIEW yang memiliki **Front Panel** (controls & indicators) dan **Block Diagram** (visual programming). Blockly sudah menjadi "Block Diagram". HMI Panel adalah "Front Panel" — menampilkan widget indikator (LED, Number, Text, Gauge) yang dikontrol programmatically dari generated code.
+Terinspirasi oleh LabVIEW yang memiliki **Front Panel** (controls & indicators) dan **Block Diagram** (visual programming). Blockly sudah menjadi "Block Diagram". HMI Panel adalah "Front Panel" — menampilkan widget **indicators** (satu arah: code → display) dan **controls** (dua arah: user input ↔ code) yang dikontrol programmatically dari generated code.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -154,7 +154,7 @@ Terinspirasi oleh LabVIEW yang memiliki **Front Panel** (controls & indicators) 
 
 | Module | File | Fungsi |
 |--------|------|--------|
-| HMI Manager | `core/hmi-manager.js` | Global `HMI` object — `setLED()`, `setNumber()`, `setText()`, `setGauge()`, `clearAll()`. GridStack integration, layout serialization, mode management (design/runtime). |
+| HMI Manager | `core/hmi-manager.js` | Global `HMI` object — indicators: `setLED()`, `setNumber()`, `setText()`, `setGauge()`; controls: `setButton()`/`getButton()`, `setSlider()`/`getSlider()`, `setSwitch()`/`getSwitch()`; lifecycle: `clearAll()`. GridStack integration, layout serialization, mode management (design/runtime). |
 | HMI Preview | `core/hmi-preview.js` | Workspace change listener — widgets appear/disappear saat block di-place/delete (design-time preview). Reconcile function handles undo/redo edge cases. |
 | Resizable Panels | `core/resizable-panels.js` | Drag-to-resize dividers: vertical (Blockly↔HMI) dan horizontal (workspace↔console). Auto-resize Blockly canvas via `Blockly.svgResize()`. |
 
@@ -162,7 +162,7 @@ Terinspirasi oleh LabVIEW yang memiliki **Front Panel** (controls & indicators) 
 - **Design mode**: Grid unlocked (drag/resize widgets), preview values, dimmed appearance. Active saat tidak ada program berjalan.
 - **Runtime mode**: Grid locked, live values dari running code, bright appearance. Active saat program berjalan.
 
-**Widget types:**
+**Widget types — Indicators** (satu arah: code → display):
 
 | Widget | JS API | Fungsi |
 |--------|--------|--------|
@@ -170,6 +170,16 @@ Terinspirasi oleh LabVIEW yang memiliki **Front Panel** (controls & indicators) 
 | Number | `HMI.setNumber(name, value, unit)` | Numeric display with unit label |
 | Text | `HMI.setText(name, text)` | Text string display |
 | Gauge | `HMI.setGauge(name, value, min, max)` | Horizontal bar gauge with range |
+
+**Widget types — Controls** (dua arah: user input ↔ code):
+
+| Widget | SET API | GET API | Fungsi |
+|--------|---------|---------|--------|
+| Button | `HMI.setButton(name, label, color)` | `HMI.getButton(name)` → Boolean | Latch-until-read: return `true` sekali per klik, auto-reset ke `false` |
+| Slider | `HMI.setSlider(name, value, min, max)` | `HMI.getSlider(name)` → Number | Drag range input. `_userValue` tracking mencegah `setSlider()` menimpa posisi user |
+| Switch | `HMI.setSwitch(name, state)` | `HMI.getSwitch(name)` → Boolean | Toggle ON/OFF. `_userState` tracking mencegah `setSwitch()` menimpa toggle user |
+
+Control widgets menggunakan **user interaction tracking** — state dari user (klik/drag/toggle) disimpan terpisah dari programmatic `set*()` call, sehingga HMI loop yang memanggil `set*()` setiap ~50ms tidak menimpa input user. Design-time preview auto-increment widget names saat block duplikat di-place.
 
 ### 2.5 Concurrent Execution — Main Program + HMI Program
 

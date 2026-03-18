@@ -43,7 +43,7 @@ jelaskan permasalah di bab ini
 # Potential Enhancements
 this list is short by priority
 - **Feasibility Study to implement Controller**: mobile robot need controller to move flawlesly.
-- **Launch files**: ROS2 launch files to start all nodes with one command includ node in raspberry pi
+- **Launch files**: ROS2 launch files to start all nodes with one command includ node in raspberry pi. composite blockly dan executor yang memiliki composit 2 jenis yaitu menggunakan executor dummy dan executor-hw.
 - **Simulation**: Integrate with Gazebo/Isaac Sim for testing Kiwi Wheel kinematics before deploying to hardware
 - **Block categories**: Future blocks grouped into Robot, Sensors, Navigation categories
 
@@ -315,163 +315,18 @@ Fields: `X (cm)`, `Y (cm)`, `Heading (rad)`, `Vel X (cm/s)`, `Vel Y (cm/s)`, `An
 - [x] Integration test `test_block_odometry.py` passes di dummy mode
 
 ## 6 Enhancement: HMI Interactive Widgets — Button, Slider, Switch : [x]
-HMI panel sebelumnya hanya memiliki widget **indicator** (satu arah: code → display): LED, Number, Text, Gauge. Enhancement ini menambahkan widget **control** (dua arah: user input ↔ code): Button, Slider, dan Switch — mengikuti konsep LabVIEW "Controls vs Indicators".
+Menambahkan widget **control** (dua arah: user input ↔ code): Button, Slider, dan Switch — mengikuti konsep LabVIEW "Controls vs Indicators". Setiap control memiliki SET block (statement) dan GET block (value). Semua client-side JS, tidak ada perubahan Python/ROS2.
 
-Setiap widget control memiliki **SET block** (statement, buat/konfigurasi widget) dan **GET block** (value, baca state interaksi user). Semua client-side JS, tidak ada perubahan Python handler atau ROS2.
-
-### Implementasi
-
-#### A. Block Definitions (6 file baru)
-Semua di `src/blockly_app/blockly_app/ui/blockly/blocks/`:
-
-| File | Tipe Block | Deskripsi | Output |
-|------|-----------|-----------|--------|
-| `hmiSetButton.js` | Statement | `HMI Button [name] label [text] color [dropdown]` | — |
-| `hmiSetSlider.js` | Statement | `HMI Slider [name] = [value] min [n] max [n]` | — |
-| `hmiSetSwitch.js` | Statement | `HMI Switch [name] state: [boolean]` | — |
-| `hmiGetButton.js` | Value | `HMI Button pressed? [name]` | Boolean |
-| `hmiGetSlider.js` | Value | `HMI Slider value [name]` | Number |
-| `hmiGetSwitch.js` | Value | `HMI Switch state [name]` | Boolean |
-
-#### B. HMI Manager (`hmi-manager.js`)
-- 3 render function: `_renderButton`, `_renderSlider`, `_renderSwitch`
-- 3 setter: `setButton(name, label, color)`, `setSlider(name, value, min, max)`, `setSwitch(name, state)`
-- 3 getter: `getButton(name)`, `getSlider(name)`, `getSwitch(name)`
-- Interaktivitas hanya aktif di runtime mode — design mode non-interactive (preview)
-
-#### C. Getter Behavior
-- **Button — latch-until-read**: `getButton()` return `true` sekali per klik, lalu auto-reset ke `false`. Mencegah satu klik terbaca berkali-kali di HMI loop 20Hz
-- **Slider — `_userValue` tracking**: Memisahkan nilai user-drag dari programmatic `setSlider()`. Mencegah `setSlider()` di loop menimpa posisi drag user
-- **Switch — toggle**: `getSwitch()` return boolean state saat ini. User klik untuk toggle ON/OFF
-
-#### D. File yang Dimodifikasi
-- `manifest.js` — 6 entry baru
-- `hmi-manager.js` — render, setter, getter, serialization, default sizes
-- `hmi-preview.js` — design-time preview untuk 3 SET block
-- `index.html` — CSS untuk button, slider (range input), switch (toggle track + thumb)
-
-### Bug 1 [x] : UI Freeze pada `while(true)` Loop di Main Program
-
-**Symptom**: Ketika Main Program menggunakan `while(true)` untuk polling `HMI.getButton()`, seluruh UI freeze — HMI panel tidak update, tombol Stop tidak responsif.
-
-**Root Cause**: JavaScript single-threaded. `highlightBlock` override di `_runConcurrent` (debug-engine.js) hanya yield ke **microtask queue** (`await` pada fungsi sinkron → resolved promise). Microtask tidak pernah memberi giliran ke **macrotask queue** dimana click events, `requestAnimationFrame`, dan HMI loop `setTimeout(r, 50)` berada.
-
-```
-while(true) → await highlightBlock() → microtask yield → while(true) → ...
-                                         ↑ macrotask queue STARVED
-                                         (click events, setTimeout, paint — tidak pernah jalan)
-```
-
-**Fix**: Tambahkan periodic yield ke macrotask queue (~60Hz) di `highlightBlock` override. Setiap 16ms, `setTimeout(r, 0)` memaksa browser memproses macrotask sebelum resume.
-
-```javascript
-var _lastYield = Date.now();
-window.highlightBlock = async function (blockId) {
-    if (debugState.stopRequested) throw new Error('STOP_EXECUTION');
-    originalHighlight(blockId);
-    var now = Date.now();
-    if (now - _lastYield >= 16) {  // 16ms = ~60fps
-        _lastYield = now;
-        await new Promise(function (r) { setTimeout(r, 0); });
-    }
-};
-```
-
-Fix diterapkan di:
-- `_runConcurrent()` — Run mode concurrent (Main + HMI)
-- `_runSingle()` — Run mode single (Main saja, sebelumnya tidak punya override sama sekali)
-
-### Bug 2 [x]: Button tidak cukup cepat untuk menangkap logika dari UI.
-
-**Symptom**: Ketika membuat program `while(getButton()!= true) {delay(500);}` logika button dari HMI tidak tercatat — `getButton()` selalu return `false` meskipun button sudah diklik.
-
-**Root Cause**: HMI loop (~20Hz) memanggil `setButton('Btn1', 'Press', '#2196f3')` setiap ~50ms. Setiap panggilan memicu `_scheduleRender` → `requestAnimationFrame` → `_render()` yang **menghancurkan DOM button lama** (`el.textContent = ''`) dan membuat elemen `<button>` baru.
-
-Event `click` membutuhkan `mousedown` + `mouseup` pada **elemen DOM yang sama**. Karena DOM button diganti setiap ~50ms, jika user menekan button (mousedown) lalu re-render terjadi sebelum mouseup, elemen yang menerima mousedown sudah tidak ada — `click` event tidak pernah fire, `widget._pressed` tetap `false`.
-
-```
-t=0ms     : User mousedown pada Button-A (DOM element)
-t=16ms    : requestAnimationFrame → _render() → Button-A DIHANCURKAN → Button-B DIBUAT
-t=100ms   : User mouseup → tapi Button-A sudah tidak ada!
-            → click event TIDAK FIRE
-            → widget._pressed tetap false
-t=500ms   : getButton('Btn1') → return false  ← bug
-```
-
-**Fix**: Ganti event `click` → `pointerdown` di `_renderButton()` (`hmi-manager.js`). `pointerdown` fire **langsung saat ditekan** tanpa menunggu mouseup, sehingga state tersimpan sebelum re-render menghancurkan DOM.
-
-```javascript
-// SEBELUM (click — butuh mousedown+mouseup pada elemen yang sama):
-btn.addEventListener('click', function () {
-    widget._pressed = true;
-});
-
-// SESUDAH (pointerdown — fire langsung saat ditekan):
-btn.addEventListener('pointerdown', function () {
-    widget._pressed = true;
-});
-```
-
-### Bug 3 [x] : `setSwitch()` menimpa state user toggle setiap 50ms
-
-**Symptom**: Ketika switch state ditampung ke variabel (`led = getSwitch()`) lalu digunakan di `setSwitch('Switch1', Boolean(led))` dalam HMI loop, switch tidak bisa di-toggle — selalu stuck di `false`.
-
-**Root Cause**: HMI loop berjalan ~20Hz (50ms), Main Program polling setiap 500ms. Ketika user toggle switch → `widget.state = true`, dalam 50ms HMI loop memanggil `setSwitch('Switch1', Boolean(led))` dimana `led` masih bernilai lama (`false`) — **menimpa toggle user kembali ke `false`** sebelum Main Program sempat membacanya.
-
-```
-t=0ms   : led = undefined → HMI: setSwitch('Switch1', false) → widget.state = false
-t=50ms  : User klik switch → widget.state = true ✓
-t=55ms  : HMI loop: setSwitch('Switch1', Boolean(led)) → led masih false!
-          → widget.state = false ← USER TOGGLE DITIMPA!
-t=500ms : Main: led = getSwitch('Switch1') → false (sudah ditimpa)
-```
-
-Masalah yang sama dengan Slider yang sudah di-solve menggunakan `_userValue` / `_userInteracting` tracking.
-
-**Fix**: Tambahkan `_userState` tracking — memisahkan state dari user interaction vs programmatic `setSwitch()`. Mengikuti pola yang sama dengan Slider (`_userValue`).
-
-Perubahan di `hmi-manager.js`:
-1. `_renderSwitch` — render menggunakan `_userState` jika ada; toggle menyimpan ke `_userState` (bukan `state`); ganti `click` → `pointerdown` (konsisten dengan fix button Bug 2)
-2. `setSwitch` — hanya re-render jika user belum interaksi (`_userState === undefined`)
-3. `getSwitch` — return `_userState` jika ada, fallback ke `state`
-4. `_resetToPreview` — `delete widget._userState` saat kembali ke design mode
-
-### Bug 4 [x] : `setSlider()` menimpa posisi drag user setelah release
-
-**Symptom**: Slider stuck di angka 0 — tidak bisa di-drag. HMI loop memanggil `HMI.setSlider('Slider1', Number(slide), 0, 100)` dimana `slide` awalnya 0, dan setiap kali user drag lalu release, slider kembali ke 0.
-
-**Root Cause**: `_userInteracting` flag hanya `true` **selama drag aktif** (mousedown→mouseup). Begitu user release slider, `_userInteracting = false`, dan dalam 50ms HMI loop memanggil `setSlider()` yang menimpa `_userValue` kembali ke nilai `slide` lama (0) — sebelum Main Program sempat membaca via `getSlider()`.
-
-```
-t=0ms   : User drag slider ke 50 → _userInteracting=true, _userValue=50
-t=100ms : User release → _userInteracting=false
-t=105ms : HMI loop: setSlider('Slider1', Number(slide), 0, 100)
-          → _userInteracting is false → _userValue = 0 ← DITIMPA!
-t=500ms : Main: slide = getSlider('Slider1') → 0 (sudah ditimpa)
-```
-
-Masalah identik dengan Switch (Bug 3) — `_userInteracting` hanya protect selama interaksi aktif, bukan setelahnya.
-
-**Fix**: Tambahkan `_userHasInteracted` flag yang **persist** setelah release. Sekali user pernah drag slider, `setSlider()` tidak akan overwrite `_userValue` lagi.
-
-Perubahan di `hmi-manager.js`:
-1. `_renderSlider` — set `_userHasInteracted = true` pada `input` event (saat user drag)
-2. `setSlider` — skip `_userValue` overwrite dan `_scheduleRender` jika `_userHasInteracted` true
-3. `_resetToPreview` — reset `_userHasInteracted = false` saat kembali ke design mode
+Detail implementasi: [docs/architecture.md](docs/architecture.md) §2.4, [BLOCKS.md](src/blockly_app/BLOCKS.md) §7.16, [troubleshooting.md](docs/troubleshooting.md).
 
 ### Definition Of Done
-- [x] 6 block file dibuat (SET + GET untuk button, slider, switch)
-- [x] `hmi-manager.js` — render, setter, getter, layout serialization
-- [x] `hmi-preview.js` — design-time preview untuk 3 SET block
-- [x] `manifest.js` — 6 entry baru terdaftar
+- [x] 6 block file (SET + GET untuk button, slider, switch)
+- [x] `hmi-manager.js` — render, setter, getter, user interaction tracking, layout serialization
+- [x] `hmi-preview.js` — design-time preview + auto-increment widget names
+- [x] `manifest.js` — 6 entry baru
 - [x] CSS untuk button, slider, switch di `index.html`
-- [x] Bug 1
-- [x] Bug 2
-- [x] Bug 3
-- [x] Bug 4
-- [x] Manual test: SET block → preview widget muncul di design mode
-- [x] Manual test: Run program → button clickable, slider draggable, switch toggleable
-- [x] Manual test: GET block membaca state interaksi user dengan benar
-- [x] Manual test: `while(true)` loop di Main Program tidak freeze UI
-- [x] Manual test: Save/load workspace — widget positions preserved
+- [x] Bug fix: `highlightBlock` periodic macrotask yield (`debug-engine.js`)
+- [x] Bug fix: `pointerdown` instead of `click` for button/switch (`hmi-manager.js`)
+- [x] Bug fix: `_userState` / `_userHasInteracted` tracking for switch/slider (`hmi-manager.js`)
+- [x] Bug fix: auto-increment duplicate widget names (`hmi-preview.js`)
 

@@ -125,6 +125,12 @@ const BLOCK_FILES = ['digitalOut.js', 'digitalIn.js', 'delay.js'];
 | `HMI.setNumber(name, value, unit)` | Display numeric value with unit label. |
 | `HMI.setText(name, text)` | Display text string. |
 | `HMI.setGauge(name, value, min, max)` | Display gauge bar with range. |
+| `HMI.setButton(name, label, color)` | Create/configure button widget. |
+| `HMI.getButton(name)` → Boolean | Latch-until-read: return `true` once per click, then auto-reset. |
+| `HMI.setSlider(name, value, min, max)` | Create/configure slider widget. `_userHasInteracted` protects user drag. |
+| `HMI.getSlider(name)` → Number | Return user-dragged value (or programmatic value if no interaction). |
+| `HMI.setSwitch(name, state)` | Create/configure toggle switch widget. `_userState` protects user toggle. |
+| `HMI.getSwitch(name)` → Boolean | Return user-toggled state (or programmatic state if no interaction). |
 | `HMI.getLayout()` / `HMI.loadLayout(items)` | Serialize/restore grid positions for save/load. |
 | `HMI.clearAll()` | Remove all widgets and reset grid. |
 
@@ -169,5 +175,11 @@ All block files registered in [`manifest.js`](blockly_app/ui/blockly/blocks/mani
 | `hmiSetNumber.js` | HMI | Statement | Client-side (`HMI.setNumber()`) |
 | `hmiSetText.js` | HMI | Statement | Client-side (`HMI.setText()`) |
 | `hmiSetGauge.js` | HMI | Statement | Client-side (`HMI.setGauge()`) |
+| `hmiSetButton.js` | HMI | Statement | Client-side (`HMI.setButton()`) |
+| `hmiGetButton.js` | HMI | Output | Client-side (`HMI.getButton()`) |
+| `hmiSetSlider.js` | HMI | Statement | Client-side (`HMI.setSlider()`) |
+| `hmiGetSlider.js` | HMI | Output | Client-side (`HMI.getSlider()`) |
+| `hmiSetSwitch.js` | HMI | Statement | Client-side (`HMI.setSwitch()`) |
+| `hmiGetSwitch.js` | HMI | Output | Client-side (`HMI.getSwitch()`) |
 
 Each block file calls `BlockRegistry.register()` with all metadata, so the toolbox is automatically generated. See [BLOCKS.md](BLOCKS.md) for the full guide to creating blocks.
