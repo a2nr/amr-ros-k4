@@ -37,9 +37,27 @@ function switchTab(tab) {
 
 /**
  * Regenerate JS code from workspace and display in code panel.
+ * Handles both plain string (single program) and structured result
+ * { definitions, mainCode, hmiCode } (concurrent mode).
  */
 function refreshCodePanel() {
   if (typeof workspace === 'undefined' || !workspace) return;
-  const code = generateCode(workspace);
-  document.getElementById('code-output').textContent = code || '// (no blocks)';
+  const codeResult = generateCode(workspace);
+
+  var display = '';
+  if (typeof codeResult === 'object' && codeResult.hmiCode !== undefined) {
+    if (codeResult.definitions.trim()) {
+      display += '// ─── Function Definitions ───\n' + codeResult.definitions + '\n';
+    }
+    if (codeResult.mainCode.trim()) {
+      display += '// ─── Main Program ───\n' + codeResult.mainCode + '\n';
+    }
+    if (codeResult.hmiCode.trim()) {
+      display += '// ─── HMI Program (loop ~20Hz) ───\n' + codeResult.hmiCode;
+    }
+  } else {
+    display = typeof codeResult === 'string' ? codeResult : '';
+  }
+
+  document.getElementById('code-output').textContent = display || '// (no blocks)';
 }

@@ -124,6 +124,16 @@ const BlockRegistry = (() => {
       },
       {
         kind: 'category',
+        name: 'Text',
+        colour: '#5ba58c',
+        contents: [
+          { kind: 'block', type: 'text' },
+          { kind: 'block', type: 'text_join' },
+          { kind: 'block', type: 'text_length' },
+        ],
+      },
+      {
+        kind: 'category',
         name: 'Variables',
         colour: '#a55b80',
         custom: 'VARIABLE',

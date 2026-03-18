@@ -10,10 +10,16 @@
 // eslint-disable-next-line no-unused-vars
 const BLOCK_FILES = [
   'mainProgram.js',
+  'mainHmiProgram.js',
+  'print.js',
   'digitalOut.js',
   'digitalIn.js',
   'delay.js',
   'pwmWrite.js',
   'odometryRead.js',
   'odometryGet.js',
+  'hmiSetLed.js',
+  'hmiSetNumber.js',
+  'hmiSetText.js',
+  'hmiSetGauge.js',
 ];

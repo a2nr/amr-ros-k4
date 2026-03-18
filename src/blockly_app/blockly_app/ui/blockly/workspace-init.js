@@ -62,7 +62,7 @@ function initWorkspace() {
     }
   });
 
-  // Enforce single main_program block per workspace
+  // Enforce single main_program and main_hmi_program blocks per workspace
   ws.addChangeListener(function (event) {
     if (event.type === Blockly.Events.BLOCK_CREATE) {
       const mainBlocks = ws.getBlocksByType('main_program');
@@ -70,6 +70,12 @@ function initWorkspace() {
         const newest = mainBlocks[mainBlocks.length - 1];
         newest.dispose();
         consoleLog('Only one Main Program block is allowed', 'error');
+      }
+      const hmiBlocks = ws.getBlocksByType('main_hmi_program');
+      if (hmiBlocks.length > 1) {
+        const newest = hmiBlocks[hmiBlocks.length - 1];
+        newest.dispose();
+        consoleLog('Only one HMI Program block is allowed', 'error');
       }
     }
   });
@@ -92,6 +98,13 @@ function initWorkspace() {
   }
   window.addEventListener('resize', onResize);
   onResize();
+
+  // Initialize HMI grid and design-time preview
+  HMI.init();
+  initHMIPreview(ws);
+
+  // Initialize resizable panel dividers
+  initResizablePanels();
 
   consoleLog('Blockly ROS2 Robot Controller initialized', 'info');
 

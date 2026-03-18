@@ -36,7 +36,7 @@ jelaskan apa yang dimaksut untuk menyelesaikan task
 
 # Potential Enhancements
 this list is short by priority
-- **Blockly UI Enhancement**: Lets make Human Interface in same view to help me monitoring node that needed. it programaticaly using block is real good, you can take labview interface as refrence. you can separated program as main_program to handle human interface. also implement print console and string for debuging.
+- **Blockly UI Enhancement**: 
 - **Feasibility Study to implement Controller**: mobile robot need controller to move flawlesly.
 - **Launch files**: ROS2 launch files to start all nodes with one command includ node in raspberry pi
 - **Simulation**: Integrate with Gazebo/Isaac Sim for testing Kiwi Wheel kinematics before deploying to hardware
@@ -308,3 +308,147 @@ Fields: `X (cm)`, `Y (cm)`, `Heading (rad)`, `Vel X (cm/s)`, `Vel Y (cm/s)`, `An
 - [x] Handler `odometry_read` berfungsi di dummy mode (test passes)
 - [ ] End-to-end: Blockly → executor (real) → cache `odometry_encoder/odom` → return JSON
 - [x] Integration test `test_block_odometry.py` passes di dummy mode
+
+## 6 Enhancement: Blockly UI — HMI Panel, Print Console & Concurrent Execution : [x]
+
+LabVIEW punya 2 view: **Front Panel** (HMI — controls & indicators) dan **Block Diagram** (visual programming). Di project ini, Blockly sudah jadi "Block Diagram". Enhancement ini menambahkan **"Front Panel"** — HMI panel dengan grid layout, resizable panels, design-time widget preview, concurrent HMI loop, plus **print console** dan **string blocks** untuk debugging.
+
+**Key Architecture Decisions**:
+- Print block dan HMI blocks **tidak membutuhkan ROS2 action** — murni client-side JavaScript. Zero latency, no network round-trip.
+- **Concurrent execution**: `main_program` + `main_hmi_program` berjalan bersamaan via `Promise.all()`. HMI loop auto-wrapped dalam `while` loop ~20Hz.
+- **Design-time preview**: Widget muncul di HMI panel saat block diletakkan (workspace change listener), bukan hanya saat runtime.
+- **Grid layout**: gridstack.js untuk drag-reposition dan drag-resize widget. Layout disimpan bersama workspace.
+
+### Implementasi
+
+#### Phase 1: Print Block & Text Category
+
+**A. Print Statement Block** — `print.js`
+- Category: `Program`, statement block: `Print [value input]`
+- Generator: `consoleLog(String(VALUE), 'print');` — no `executeAction`, purely client-side
+- Works with any expression via `String(expr)` pattern
+
+**B. Text Category** — built-in Blockly blocks: `text`, `text_join`, `text_length`
+
+#### Phase 2: HMI Panel Infrastructure
+
+**A. Resizable Split View** — Blockly on left, HMI panel on right
+- Drag dividers (`resizable-panels.js`): vertical (Blockly↔HMI) dan horizontal (workspace↔console)
+- Clamps: HMI 200px–50% viewport; console 80px–40% viewport
+- `Blockly.svgResize(workspace)` dipanggil setiap move
+
+**B. HMI Manager** — `hmi-manager.js`
+- Global `HMI` object: `setLED()`, `setNumber()`, `setText()`, `setGauge()`, `clearAll()`
+- Two modes: `design` (grid unlocked, preview values) / `runtime` (grid locked, live values)
+- gridstack.js integration: `init()`, `addWidget()`, `removeWidget()`, `getLayout()`, `loadLayout()`
+- Pure DOM API rendering (no innerHTML) — XSS safe
+
+**C. Design-time Preview** — `hmi-preview.js`
+- Workspace change listener (`BLOCK_CREATE`, `BLOCK_DELETE`, `BLOCK_CHANGE`)
+- Widgets appear/disappear as blocks are placed/deleted
+- `_hmiPreviewScan` for workspace-io.js to call after import
+
+#### Phase 3: HMI Blocks
+
+| Block | Type | Category | Fungsi |
+|-------|------|----------|--------|
+| `hmiSetLed` | Statement | HMI | Set LED indicator on/off with color |
+| `hmiSetNumber` | Statement | HMI | Display numeric value with unit label |
+| `hmiSetText` | Statement | HMI | Display text string |
+| `hmiSetGauge` | Statement | HMI | Display gauge bar with min/max range |
+
+Semua HMI blocks: purely client-side (call `HMI.*()` functions), Field `NAME` untuk widget identifier, Value input untuk dynamic value.
+
+#### Phase 4: Concurrent Execution — `main_hmi_program`
+
+**A. `mainHmiProgram.js`** — Hat block, category "Program", color `#00BCD4`
+- Generator does NOT emit `highlightBlock()` — HMI runs full speed
+- Enforced: max 1 `main_hmi_program` per workspace (same as `main_program`)
+
+**B. `generateCode(ws)`** returns `{ definitions, mainCode, hmiCode }` when HMI block present
+
+**C. `debug-engine.js`** — `runProgram()` / `runDebug()` dispatch to single or concurrent mode:
+- `_runSingle()` / `_runDebugSingle()` — original behavior (no HMI block)
+- `_runConcurrent()` / `_runDebugConcurrent()` — `Promise.all()` with HMI while-loop
+- HMI eval scope shadows `highlightBlock` to no-op (full speed)
+- Main program drives completion → `stopRequested` signals HMI loop exit
+- Debug mode: only main program has stepping/breakpoints; HMI uninterrupted
+
+**D. Save/Load** — `workspace-io.js` saves `{ workspace, hmiLayout }`, backward-compatible
+
+**Use Case Example** — Concurrent odometry monitoring:
+```
+main_program:                          main_hmi_program:
+  forever:                               HMI Set Number "X" = getVal [X] from [odom]
+    set [odom] to getOdometry [Encoder]  HMI Set Number "Y" = getVal [Y] from [odom]
+    digital_out(17, true)                HMI Set Gauge "Heading" = getVal [θ] from [odom]
+    delay(1000)                          HMI Set LED "Running" = true, color: green
+    digital_out(17, false)
+```
+
+### Files Changed
+
+**New files (11)**:
+1. `blocks/print.js` — Print block
+2. `blocks/mainHmiProgram.js` — HMI program hat block
+3. `blocks/hmiSetLed.js` — LED indicator block
+4. `blocks/hmiSetNumber.js` — Numeric display block
+5. `blocks/hmiSetText.js` — Text display block
+6. `blocks/hmiSetGauge.js` — Gauge bar block
+7. `core/hmi-manager.js` — HMI state manager + gridstack integration
+8. `core/hmi-preview.js` — Design-time widget preview
+9. `core/resizable-panels.js` — Drag-to-resize panels
+10. `vendor/gridstack-all.js` — gridstack.js vendor file
+11. `vendor/gridstack.min.css` — gridstack CSS
+
+**Modified files (7)**:
+1. `index.html` — Layout restructure, drag dividers, gridstack CSS/JS, dark theme overrides
+2. `blocks/manifest.js` — Add all new block files
+3. `core/registry.js` — Add Text built-in category
+4. `core/async-procedures.js` — Return structured `{ definitions, mainCode, hmiCode }`
+5. `core/debug-engine.js` — Concurrent run/debug, HMI.setMode() lifecycle
+6. `core/ui-tabs.js` — Display structured code in Code tab
+7. `workspace-init.js` — HMI.init(), initHMIPreview(), initResizablePanels(), enforce single main_hmi_program
+
+**No Python changes** — semua murni client-side JavaScript. No build step needed.
+
+### Definition Of Done
+- [x] Print block generate `consoleLog(String(...), 'print')`, output tampil di console
+- [x] Text category: `text`, `text_join`, `text_length` blocks di toolbox
+- [x] Resizable panels: drag dividers between Blockly↔HMI and workspace↔console
+- [x] HMI panel dengan gridstack grid layout (drag-reposition, drag-resize widgets)
+- [x] Design-time preview: widgets appear when blocks placed, disappear when deleted
+- [x] HMI LED/Number/Text/Gauge blocks create/update widgets via `HMI.set*()`
+- [x] HMI widgets persist across loop iterations (update in place)
+- [x] `main_hmi_program` block runs concurrently with `main_program` via Promise.all()
+- [x] HMI loop auto-wrapped at ~20Hz, runs at full speed (no highlightBlock)
+- [x] Debug mode: main program has stepping/breakpoints, HMI runs uninterrupted
+- [x] Code tab displays both main and HMI code sections
+- [x] Save/load preserves workspace + HMI grid layout (backward-compatible)
+- [x] All blocks work in debug mode (highlightBlock + step through)
+
+### Known Bugs (ditemukan saat testing manual, fix sudah ditulis tapi belum diverifikasi)
+
+**Bug 1 — Blockly workspace tidak ikut resize saat panel di-drag**
+- **Root cause**: `resizable-panels.js` hanya panggil `Blockly.svgResize()` tanpa update dimensi `#blockly-div` yang `position: absolute`
+- **Fix**: Update `#blockly-div` width/height dari `#blockly-area` offsetWidth/Height sebelum svgResize
+- **File**: `core/resizable-panels.js` (mousemove handler)
+- **Verifikasi**: Drag vertical divider → Blockly canvas resize smoothly. Drag horizontal divider → sama
+
+**Bug 2 — App freeze saat kedua program pakai `while(true)`**
+- **Root cause**: User menulis `while(true)` di `main_hmi_program`. Auto-wrapper menambah outer while-loop, tapi inner `while(true)` dengan HMI calls (synchronous) tidak pernah yield ke event loop
+- **Fix**: HMI shadowed `highlightBlock` diubah dari sync no-op ke `async function` dengan `stopRequested` check. Setiap `await highlightBlock()` di generated code yield ke event loop + bisa di-stop. Juga override `window.highlightBlock` di non-debug `_runConcurrent` untuk main program
+- **File**: `core/debug-engine.js` — `_runConcurrent()` dan `_runDebugConcurrent()`
+- **Verifikasi**: `while(true)` di kedua program → app responsif. Klik Stop → keduanya berhenti
+
+**Bug 3 — Variabel tidak ter-share antara main dan HMI program**
+- **Root cause**: `definitions` (berisi `var led;`) di-eval di dua IIFE terpisah → dua scope terpisah. Main set `led = 1`, HMI baca `led` dari scope sendiri (tetap 0)
+- **Fix**: Gabung kedua program dalam SATU eval — outer IIFE berisi `definitions`, dua inner IIFE (main + HMI) close over shared scope. Variabel yang diubah di main langsung terlihat di HMI via closure
+- **File**: `core/debug-engine.js` — `_runConcurrent()` dan `_runDebugConcurrent()`
+- **Verifikasi**: Set `led = 1` di main, baca `led` di HMI → LED update. Test dengan delay loop toggle variable
+
+**Bug 4 — Delete HMI block tidak menghapus preview widget; undo muncul blank widget**
+- **Root cause**: `_blockToWidget` Map di `hmi-preview.js` kehilangan sinkronisasi saat undo/redo. Blockly events pada undo tidak selalu re-add mapping, sehingga widget jadi orphan
+- **Fix**: Tambah `_reconcile()` dengan 100ms debounce setelah setiap workspace event. Fungsi ini compare HMI blocks di workspace vs `_blockToWidget` map, hapus widget orphan, tambah widget yang belum ter-track
+- **File**: `core/hmi-preview.js`
+- **Verifikasi**: Place HMI block → widget muncul. Delete → widget hilang. Undo → widget kembali. Redo → widget hilang lagi

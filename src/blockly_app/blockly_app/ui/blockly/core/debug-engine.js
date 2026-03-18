@@ -62,8 +62,20 @@ function exitFunction() {
  * model for the visual programming environment.
  */
 async function runProgram() {
-  const code = generateCode(workspace);
+  const codeResult = generateCode(workspace);
 
+  // Detect structured result (concurrent mode) vs plain string
+  if (typeof codeResult === 'object' && codeResult.hmiCode !== undefined) {
+    await _runConcurrent(codeResult);
+  } else {
+    await _runSingle(typeof codeResult === 'string' ? codeResult : '');
+  }
+}
+
+/**
+ * Run a single program (no HMI block present). Original behavior.
+ */
+async function _runSingle(code) {
   if (!code.trim()) {
     consoleLog('No blocks to execute', 'error');
     return;
@@ -74,6 +86,7 @@ async function runProgram() {
   debugState.stopRequested = false;
   updateButtonStates();
 
+  HMI.setMode('runtime');
   consoleLog('=== Program started ===', 'info');
 
   try {
@@ -92,6 +105,83 @@ async function runProgram() {
     debugState.isRunning = false;
     debugState.isPaused = false;
     workspace.highlightBlock(null);
+    HMI.setMode('design');
+    updateButtonStates();
+  }
+}
+
+/**
+ * Run main program + HMI program concurrently with shared variable scope.
+ * Both programs are wrapped in a single outer IIFE so definitions (variables,
+ * functions) are shared via closure. HMI code is auto-wrapped in a while-loop
+ * that runs at ~20Hz until stopRequested.
+ */
+async function _runConcurrent(codeResult) {
+  const { definitions, mainCode, hmiCode } = codeResult;
+
+  if (!mainCode.trim() && !hmiCode.trim()) {
+    consoleLog('No blocks to execute', 'error');
+    return;
+  }
+
+  debugState.isRunning = true;
+  debugState.isPaused = false;
+  debugState.stopRequested = false;
+  updateButtonStates();
+
+  // Override highlightBlock for main program — visual feedback + stop check
+  var originalHighlight = window.highlightBlock;
+  window.highlightBlock = async function (blockId) {
+    if (debugState.stopRequested) throw new Error('STOP_EXECUTION');
+    originalHighlight(blockId);
+  };
+
+  HMI.setMode('runtime');
+  consoleLog('=== Program started (concurrent) ===', 'info');
+
+  try {
+    // Single eval with shared scope — definitions are in outer IIFE,
+    // both main and HMI inner IIFEs close over them.
+    // HMI's highlightBlock is async + checks stopRequested (yields + stoppable).
+    var combined = '(async function() {\n' +
+      definitions + '\n' +
+      'var _main = ' + (mainCode.trim()
+        ? '(async function() {\n' + mainCode + '\n})()'
+        : 'Promise.resolve()') + ';\n' +
+      'var _hmi = ' + (hmiCode.trim()
+        ? '(async function() {\n' +
+          'var highlightBlock = async function() {\n' +
+          '  if (debugState.stopRequested) throw new Error("STOP_EXECUTION");\n' +
+          '};\n' +
+          'while (!debugState.stopRequested) {\n' +
+          hmiCode + '\n' +
+          'await new Promise(function(r) { setTimeout(r, 50); });\n' +
+          '}\n' +
+          '})()'
+        : 'Promise.resolve()') + ';\n' +
+      'await _main;\n' +
+      'debugState.stopRequested = true;\n' +
+      'await _hmi;\n' +
+      '})()';
+
+    await (0, globalThis.eval)(combined);
+
+    if (!debugState.stopRequested || debugState.isRunning) {
+      consoleLog('=== Program completed ===', 'success');
+    }
+  } catch (e) {
+    debugState.stopRequested = true;  // Ensure HMI loop exits on error
+    if (e.message === 'STOP_EXECUTION') {
+      consoleLog('=== Program stopped by user ===', 'info');
+    } else {
+      consoleLog('Error: ' + e.message, 'error');
+    }
+  } finally {
+    window.highlightBlock = originalHighlight;
+    debugState.isRunning = false;
+    debugState.isPaused = false;
+    workspace.highlightBlock(null);
+    HMI.setMode('design');
     updateButtonStates();
   }
 }
@@ -108,8 +198,20 @@ async function runProgram() {
  * Note: eval() is intentional — see runProgram() comment.
  */
 async function runDebug() {
-  const code = generateCode(workspace);
+  const codeResult = generateCode(workspace);
 
+  // Detect structured result (concurrent mode) vs plain string
+  if (typeof codeResult === 'object' && codeResult.hmiCode !== undefined) {
+    await _runDebugConcurrent(codeResult);
+  } else {
+    await _runDebugSingle(typeof codeResult === 'string' ? codeResult : '');
+  }
+}
+
+/**
+ * Debug a single program (no HMI block present). Original debug behavior.
+ */
+async function _runDebugSingle(code) {
   if (!code.trim()) {
     consoleLog('No blocks to execute', 'error');
     return;
@@ -123,16 +225,19 @@ async function runDebug() {
   debugState.stepStartDepth = 0;
   updateButtonStates();
 
+  HMI.setMode('runtime');
   consoleLog('=== Debug started ===', 'info');
 
   let firstHighlight = true;
+
+  // Save originals before try — so finally can always restore
+  const originalExecuteAction = window.executeAction;
+  const originalHighlight = window.highlightBlock;
 
   try {
     const wrappedCode = '(async function() {\n' + code + '\n})()';
 
     // Override executeAction — only check stop, no pause logic
-    const originalExecuteAction = window.executeAction;
-
     window.executeAction = async function (command, params) {
       if (debugState.stopRequested) {
         throw new Error('STOP_EXECUTION');
@@ -141,8 +246,6 @@ async function runDebug() {
     };
 
     // Override highlightBlock with async version — the universal pause point
-    const originalHighlight = window.highlightBlock;
-
     window.highlightBlock = async function (blockId) {
       originalHighlight(blockId);
 
@@ -220,6 +323,146 @@ async function runDebug() {
     debugState.stepMode = null;
     debugResolve = null;
     workspace.highlightBlock(null);
+    HMI.setMode('design');
+    updateButtonStates();
+  }
+}
+
+/**
+ * Debug main program + HMI program concurrently with shared variable scope.
+ * Main program gets full debug stepping (breakpoints, step over/into).
+ * HMI program runs at full speed — highlightBlock shadowed to async stop check.
+ * Both programs share variable definitions via closure in a single outer IIFE.
+ */
+async function _runDebugConcurrent(codeResult) {
+  const { definitions, mainCode, hmiCode } = codeResult;
+
+  if (!mainCode.trim() && !hmiCode.trim()) {
+    consoleLog('No blocks to execute', 'error');
+    return;
+  }
+
+  debugState.isRunning = true;
+  debugState.isPaused = false;
+  debugState.stopRequested = false;
+  debugState.callDepth = 0;
+  debugState.stepMode = null;
+  debugState.stepStartDepth = 0;
+  updateButtonStates();
+
+  HMI.setMode('runtime');
+  consoleLog('=== Debug started (concurrent) ===', 'info');
+
+  let firstHighlight = true;
+
+  const originalExecuteAction = window.executeAction;
+  const originalHighlight = window.highlightBlock;
+
+  try {
+    // Override executeAction — only check stop
+    window.executeAction = async function (command, params) {
+      if (debugState.stopRequested) {
+        throw new Error('STOP_EXECUTION');
+      }
+      return await originalExecuteAction(command, params);
+    };
+
+    // Override highlightBlock with debug pause logic (for main program)
+    window.highlightBlock = async function (blockId) {
+      originalHighlight(blockId);
+
+      if (debugState.stopRequested) {
+        throw new Error('STOP_EXECUTION');
+      }
+
+      var shouldPause = false;
+
+      if (firstHighlight) {
+        firstHighlight = false;
+        shouldPause = true;
+      } else if (debugState.stepMode === 'into') {
+        shouldPause = true;
+      } else if (debugState.stepMode === 'over') {
+        if (debugState.callDepth <= debugState.stepStartDepth) {
+          shouldPause = true;
+        }
+      } else if (debugState.stepMode === 'continue' || debugState.stepMode === null) {
+        if (activeBreakpoints.has(blockId)) {
+          shouldPause = true;
+        }
+      }
+
+      if (shouldPause) {
+        debugState.isPaused = true;
+        debugState.stepMode = null;
+        updateButtonStates();
+
+        if (activeBreakpoints.has(blockId)) {
+          consoleLog('Breakpoint hit on block ' + blockId, 'feedback');
+        }
+
+        await new Promise(function (resolve) {
+          debugResolve = resolve;
+        });
+
+        if (debugState.stopRequested) {
+          throw new Error('STOP_EXECUTION');
+        }
+      } else {
+        var inDeeperCall = debugState.stepMode === 'over' &&
+          debugState.callDepth > debugState.stepStartDepth;
+        if (debugState.stepMode === null && !inDeeperCall) {
+          await new Promise(function (r) { setTimeout(r, 300); });
+        }
+      }
+    };
+
+    // Single eval with shared scope — definitions in outer IIFE,
+    // both main and HMI close over them. Main uses window.highlightBlock
+    // (debug override above). HMI shadows with async stop-check version.
+    var combined = '(async function() {\n' +
+      definitions + '\n' +
+      'var _main = ' + (mainCode.trim()
+        ? '(async function() {\n' + mainCode + '\n})()'
+        : 'Promise.resolve()') + ';\n' +
+      'var _hmi = ' + (hmiCode.trim()
+        ? '(async function() {\n' +
+          'var highlightBlock = async function() {\n' +
+          '  if (debugState.stopRequested) throw new Error("STOP_EXECUTION");\n' +
+          '};\n' +
+          'while (!debugState.stopRequested) {\n' +
+          hmiCode + '\n' +
+          'await new Promise(function(r) { setTimeout(r, 50); });\n' +
+          '}\n' +
+          '})()'
+        : 'Promise.resolve()') + ';\n' +
+      'await _main;\n' +
+      'debugState.stopRequested = true;\n' +
+      'await _hmi;\n' +
+      '})()';
+
+    await (0, globalThis.eval)(combined);
+
+    if (!debugState.stopRequested || debugState.isRunning) {
+      consoleLog('=== Debug completed ===', 'success');
+    }
+  } catch (e) {
+    debugState.stopRequested = true;  // Ensure HMI loop exits on error
+    if (e.message === 'STOP_EXECUTION') {
+      consoleLog('=== Program stopped by user ===', 'info');
+    } else {
+      consoleLog('Error: ' + e.message, 'error');
+    }
+  } finally {
+    window.executeAction = originalExecuteAction;
+    window.highlightBlock = originalHighlight;
+    debugState.isRunning = false;
+    debugState.isPaused = false;
+    debugState.callDepth = 0;
+    debugState.stepMode = null;
+    debugResolve = null;
+    workspace.highlightBlock(null);
+    HMI.setMode('design');
     updateButtonStates();
   }
 }

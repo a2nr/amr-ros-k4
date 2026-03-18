@@ -81,6 +81,15 @@
     );
   };
 
+  // ─── Override: variables_set ────────────────────────────────────────────────
+  // Built-in Blockly generators don't emit highlightBlock(). Override
+  // variables_set (statement block) so it highlights during debug/run.
+  const origVarSet = gen.forBlock['variables_set'];
+  gen.forBlock['variables_set'] = function (block, generator) {
+    var code = origVarSet.call(this, block, generator);
+    return "await highlightBlock('" + block.id + "');\n" + code;
+  };
+
   // ─── generateCode(ws) ─────────────────────────────────────────────────────
   /**
    * Generate executable code from the workspace.
@@ -88,21 +97,24 @@
    * If a main_program block exists:
    *   - Only function definitions + main block body are included
    *   - Orphan top-level blocks are ignored
-   * If no main_program block:
+   * If a main_hmi_program block also exists:
+   *   - Returns { definitions, mainCode, hmiCode } object for concurrent execution
+   * If no main_program or main_hmi_program:
    *   - Falls back to standard workspaceToCode() behavior (backward compatible)
    *
    * @param {Blockly.Workspace} ws
-   * @returns {string} Generated JavaScript code
+   * @returns {string|Object} Generated code string, or {definitions, mainCode, hmiCode}
    */
   window.generateCode = function (ws) {
     const mainBlocks = ws.getBlocksByType('main_program');
+    const hmiBlocks = ws.getBlocksByType('main_hmi_program');
 
-    if (mainBlocks.length === 0) {
-      // No main block — backward compatible
+    if (mainBlocks.length === 0 && hmiBlocks.length === 0) {
+      // No main or HMI block — backward compatible
       return gen.workspaceToCode(ws);
     }
 
-    // Main block exists — selective code generation
+    // Selective code generation
     gen.init(ws);
 
     // 1. Process all procedure definition blocks to populate definitions_
@@ -116,20 +128,36 @@
       }
     }
 
-    // 2. Process the main block body
-    let mainCode = gen.blockToCode(mainBlocks[0]);
-    if (Array.isArray(mainCode)) {
-      mainCode = mainCode[0];
+    // 2. Process main program body
+    let mainCode = '';
+    if (mainBlocks.length > 0) {
+      mainCode = gen.blockToCode(mainBlocks[0]);
+      if (Array.isArray(mainCode)) mainCode = mainCode[0];
     }
 
-    // 3. Assemble: definitions (async functions) + main body code
-    let code = gen.finish(mainCode);
+    // 3. Process HMI program body
+    let hmiCode = '';
+    if (hmiBlocks.length > 0) {
+      hmiCode = gen.blockToCode(hmiBlocks[0]);
+      if (Array.isArray(hmiCode)) hmiCode = hmiCode[0];
+    }
 
-    // Clean up whitespace
+    // 4. If HMI block exists, return structured result for concurrent execution
+    if (hmiBlocks.length > 0) {
+      let definitions = gen.finish('');
+      definitions = definitions.replace(/^\s+\n/, '').replace(/\n\s+$/, '\n');
+      return {
+        definitions: definitions,
+        mainCode: mainCode,
+        hmiCode: hmiCode,
+      };
+    }
+
+    // 5. No HMI block: return plain string (backward compatible)
+    let code = gen.finish(mainCode);
     code = code.replace(/^\s+\n/, '');
     code = code.replace(/\n\s+$/, '\n');
     code = code.replace(/[ \t]+\n/g, '\n');
-
     return code;
   };
 })();

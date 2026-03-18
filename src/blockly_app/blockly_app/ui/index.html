@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Blockly ROS2 Robot Controller</title>
+  <link rel="stylesheet" href="vendor/gridstack.min.css">
   <style>
     * {
       margin: 0;
@@ -86,6 +87,13 @@
     }
 
     #workspace-area {
+      flex: 1;
+      display: flex;
+      flex-direction: row;
+      overflow: hidden;
+    }
+
+    #left-pane {
       flex: 1;
       display: flex;
       flex-direction: column;
@@ -184,6 +192,160 @@
     #console-panel .log-success { color: #4ec9b0; }
     #console-panel .log-error { color: #f48771; }
     #console-panel .log-feedback { color: #dcdcaa; }
+    #console-panel .log-print { color: #ce9178; }
+
+    /* Resize dividers */
+    .resize-divider-v {
+      width: 4px;
+      cursor: col-resize;
+      background: #404040;
+      flex-shrink: 0;
+    }
+    .resize-divider-v:hover, .resize-divider-v.dragging { background: #4caf50; }
+
+    .resize-divider-h {
+      height: 4px;
+      cursor: row-resize;
+      background: #404040;
+      flex-shrink: 0;
+    }
+    .resize-divider-h:hover, .resize-divider-h.dragging { background: #4caf50; }
+
+    /* HMI Panel — LabVIEW-style Front Panel */
+    #hmi-panel {
+      width: 300px;
+      flex-shrink: 0;
+      background: #1a1a1a;
+      border-left: 1px solid #404040;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #hmi-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      background: #2d2d2d;
+      border-bottom: 1px solid #404040;
+      font-size: 13px;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+
+    #hmi-header span {
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    #hmi-content {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    /* gridstack dark theme overrides */
+    .grid-stack { background: #1a1a1a; min-height: 100% !important; }
+    .grid-stack-item-content {
+      background: #2d2d2d;
+      border: 1px solid #404040;
+      border-radius: 4px;
+      padding: 8px;
+      overflow: hidden;
+    }
+    .grid-stack > .grid-stack-placeholder > .placeholder-content {
+      border: 1px dashed #4caf50 !important;
+      background: rgba(76, 175, 80, 0.1) !important;
+    }
+
+    .hmi-widget {
+      height: 100%;
+    }
+
+    .hmi-widget-label {
+      font-size: 11px;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .hmi-widget-body {
+      font-size: 16px;
+      color: #d4d4d4;
+    }
+
+    /* LED indicator */
+    .hmi-led {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: inline-block;
+      vertical-align: middle;
+      border: 1px solid #555;
+    }
+
+    .hmi-led.on {
+      box-shadow: 0 0 8px var(--led-color, #4caf50);
+      background: var(--led-color, #4caf50);
+    }
+
+    .hmi-led.off {
+      background: #333;
+    }
+
+    /* Numeric display */
+    .hmi-number-value {
+      font-size: 24px;
+      font-weight: 600;
+      font-family: 'Consolas', 'Courier New', monospace;
+    }
+
+    .hmi-number-unit {
+      font-size: 12px;
+      color: #888;
+      margin-left: 4px;
+    }
+
+    /* Text display */
+    .hmi-text-value {
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 13px;
+      word-break: break-word;
+    }
+
+    /* Gauge bar */
+    .hmi-gauge-bar {
+      width: 100%;
+      height: 12px;
+      background: #333;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+
+    .hmi-gauge-fill {
+      height: 100%;
+      background: #4caf50;
+      border-radius: 6px;
+      transition: width 0.15s ease;
+    }
+
+    .hmi-gauge-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #666;
+      margin-top: 2px;
+    }
+
+    /* Design-time preview indicator */
+    .hmi-widget-preview .hmi-widget-body { opacity: 0.5; }
+    .hmi-widget-preview .hmi-widget-label::after {
+      content: ' (preview)';
+      font-style: italic;
+      color: #666;
+    }
   </style>
 </head>
 <body>
@@ -203,19 +365,31 @@
     </div>
   </div>
 
-  <!-- Blockly Workspace + Code Tab -->
+  <!-- Blockly Workspace + Code Tab + HMI Panel -->
   <div id="workspace-area">
-    <div id="tab-bar">
-      <button class="tab-btn active" id="tab-blocks" onclick="switchTab('blocks')">Blocks</button>
-      <button class="tab-btn" id="tab-code" onclick="switchTab('code')">Code</button>
+    <div id="left-pane">
+      <div id="tab-bar">
+        <button class="tab-btn active" id="tab-blocks" onclick="switchTab('blocks')">Blocks</button>
+        <button class="tab-btn" id="tab-code" onclick="switchTab('code')">Code</button>
+      </div>
+      <div id="blockly-area">
+        <div id="blockly-div"></div>
+      </div>
+      <div id="code-panel" style="display:none">
+        <pre id="code-output"></pre>
+      </div>
     </div>
-    <div id="blockly-area">
-      <div id="blockly-div"></div>
-    </div>
-    <div id="code-panel" style="display:none">
-      <pre id="code-output"></pre>
+    <div id="resize-v" class="resize-divider-v"></div>
+    <div id="hmi-panel">
+      <div id="hmi-header">
+        <span>HMI Panel</span>
+      </div>
+      <div id="hmi-content" class="grid-stack"></div>
     </div>
   </div>
+
+  <!-- Resize divider: workspace ↔ console -->
+  <div id="resize-h" class="resize-divider-h"></div>
 
   <!-- Console Output -->
   <div id="console-panel"></div>
@@ -239,13 +413,17 @@
   <script src="vendor/blocks_compressed.js"></script>
   <script src="vendor/javascript_compressed.js"></script>
   <script src="vendor/en.js"></script>
+  <script src="vendor/gridstack-all.js"></script>
 
   <!-- Core infrastructure (load order matters) -->
   <script src="blockly/core/registry.js"></script>
+  <script src="blockly/core/hmi-manager.js"></script>
+  <script src="blockly/core/hmi-preview.js"></script>
   <script src="blockly/core/async-procedures.js"></script>
   <script src="blockly/core/breakpoints.js"></script>
   <script src="blockly/core/bridge.js"></script>
   <script src="blockly/core/debug-engine.js"></script>
+  <script src="blockly/core/resizable-panels.js"></script>
   <script src="blockly/core/ui-controls.js"></script>
   <script src="blockly/core/ui-tabs.js"></script>
   <script src="blockly/core/workspace-io.js"></script>
