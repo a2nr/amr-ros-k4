@@ -73,17 +73,34 @@ Both functions use `async/await` — they return after the file dialog closes an
 
 **Purpose:** Provides `executeAction(command, params)` which calls Python via the pywebview JS-to-Python bridge. Falls back to a mock when running outside pywebview (browser dev).
 
+#### [`blockly_app/ui/blockly/core/async-procedures.js`](blockly_app/ui/blockly/core/async-procedures.js) — Async Code Generation
+
+**Purpose:** Overrides Blockly's built-in procedure generators for async/await support, overrides `variables_set` for debug highlight, and provides `generateCode(ws)` which replaces `workspaceToCode()`.
+
+| Component | Description |
+|---|---|
+| `procedures_defreturn` override | Generates `async function` instead of `function` |
+| `procedures_callreturn` override | Wraps in async IIFE with `enterFunction()` / `exitFunction()` for call depth tracking |
+| `procedures_callnoreturn` override | Adds `await highlightBlock()` + call depth tracking |
+| `variables_set` override | Adds `await highlightBlock()` before variable assignment for debug support |
+| `generateCode(ws)` | Main-block-aware code generation. Returns plain string or `{ definitions, mainCode, hmiCode }` for concurrent execution. |
+
 #### [`blockly_app/ui/blockly/core/debug-engine.js`](blockly_app/ui/blockly/core/debug-engine.js) — Debug Engine
 
-**Purpose:** Implements Run, Debug, Step Over, Step Into, and Stop functionality.
+**Purpose:** Implements Run, Debug, Step Over, Step Into, and Stop functionality. Supports single-program and concurrent (main+HMI) execution modes.
 
 | Function | Description |
 |---|---|
-| `runProgram()` | Non-debug execution: wraps generated code in async function and eval()s it |
-| `runDebug()` | Debug execution: wraps executeAction to check breakpoints and add delays |
-| `stepOver()` | Resumes from pause, executes current block, pauses at next block |
+| `runProgram()` | Non-debug execution: detects single vs concurrent mode, dispatches accordingly |
+| `_runSingle(code)` | Single program execution (no HMI block present) |
+| `_runConcurrent(codeResult)` | Concurrent execution: main + HMI via `Promise.all()` with shared variable scope |
+| `runDebug()` | Debug execution: detects single vs concurrent mode |
+| `_runDebugSingle(code)` | Single program debug with breakpoints and stepping |
+| `_runDebugConcurrent(codeResult)` | Concurrent debug: main has stepping, HMI runs uninterrupted |
+| `stepOver()` | Resumes from pause, executes current block, pauses at next block at same call depth |
 | `stepInto()` | Resumes from pause, pauses at very next highlightBlock call |
-| `stopExecution()` | Sets stopRequested flag, resolves any pending pause Promise |
+| `continueExecution()` | Resumes and runs until next breakpoint |
+| `stopExecution()` | Sets stopRequested flag, cancels in-flight actions, resolves pending pause Promise |
 | `highlightBlock(blockId)` | Highlights the currently executing block in the workspace |
 
 #### [`blockly_app/ui/blockly/blocks/manifest.js`](blockly_app/ui/blockly/blocks/manifest.js) — Block Manifest
@@ -94,8 +111,63 @@ Both functions use `async/await` — they return after the file dialog closes an
 const BLOCK_FILES = ['digitalOut.js', 'digitalIn.js', 'delay.js'];
 ```
 
-#### [`blockly_app/ui/blockly/blocks/digitalOut.js`](blockly_app/ui/blockly/blocks/digitalOut.js) — Example Block
+#### [`blockly_app/ui/blockly/core/hmi-manager.js`](blockly_app/ui/blockly/core/hmi-manager.js) — HMI State Manager
 
-**Purpose:** Self-contained block definition. Contains both the visual appearance AND the code generator.
+**Purpose:** Global `HMI` object providing LabVIEW-style Front Panel with gridstack.js grid layout. Manages widget lifecycle, mode switching (design/runtime), and layout serialization.
 
-Each block file calls `BlockRegistry.register()` with all metadata, so the toolbox is automatically generated.
+| Method | Description |
+|---|---|
+| `HMI.init()` | Initialize GridStack instance. Called once after DOM is ready. |
+| `HMI.addWidget(name, type, config, blockId)` | Add widget to grid. Updates if exists. |
+| `HMI.removeWidget(name)` | Remove widget from grid and DOM. |
+| `HMI.setMode(mode)` | Switch between `'design'` (grid unlocked) and `'runtime'` (grid locked). |
+| `HMI.setLED(name, state, color)` | Set LED on/off with color. Called from generated code. |
+| `HMI.setNumber(name, value, unit)` | Display numeric value with unit label. |
+| `HMI.setText(name, text)` | Display text string. |
+| `HMI.setGauge(name, value, min, max)` | Display gauge bar with range. |
+| `HMI.getLayout()` / `HMI.loadLayout(items)` | Serialize/restore grid positions for save/load. |
+| `HMI.clearAll()` | Remove all widgets and reset grid. |
+
+#### [`blockly_app/ui/blockly/core/hmi-preview.js`](blockly_app/ui/blockly/core/hmi-preview.js) — Design-time Widget Preview
+
+**Purpose:** Workspace change listener that creates/removes HMI widgets as blocks are placed/deleted. Widgets appear in the HMI panel at design time, not just at runtime.
+
+| Function | Description |
+|---|---|
+| `initHMIPreview(ws)` | Sets up workspace change listener. Tracks block-to-widget mapping. |
+| `_handleCreate(event)` | Creates widget when HMI block is placed. |
+| `_handleDelete(event)` | Removes widget when HMI block is deleted. |
+| `_handleChange(event)` | Updates widget when block field changes (NAME, COLOR, UNIT, MIN, MAX). |
+| `_reconcile()` | Debounced (100ms) full sync — catches undo/redo edge cases. |
+| `window._hmiPreviewScan()` | Scans existing blocks after workspace import to recreate previews. |
+
+#### [`blockly_app/ui/blockly/core/resizable-panels.js`](blockly_app/ui/blockly/core/resizable-panels.js) — Resizable Split Panels
+
+**Purpose:** Drag-to-resize dividers between Blockly workspace, HMI panel, and console. Updates `#blockly-div` dimensions and calls `Blockly.svgResize()` on each move.
+
+| Divider | Direction | Range |
+|---------|-----------|-------|
+| Vertical (Blockly↔HMI) | Horizontal drag | HMI 200px–50% viewport |
+| Horizontal (workspace↔console) | Vertical drag | Console 80px–40% viewport |
+
+#### [`blockly_app/ui/blockly/blocks/`](blockly_app/ui/blockly/blocks/) — Block Definitions
+
+All block files registered in [`manifest.js`](blockly_app/ui/blockly/blocks/manifest.js):
+
+| File | Category | Type | Execution Model |
+|------|----------|------|-----------------|
+| `mainProgram.js` | Program | Hat block | N/A (entry point) |
+| `mainHmiProgram.js` | Program | Hat block | N/A (HMI entry point) |
+| `print.js` | Program | Statement | Client-side (`consoleLog()`) |
+| `digitalOut.js` | Robot | Statement | ROS2 action (`digital_out`) |
+| `digitalIn.js` | Robot | Output | ROS2 action (`digital_in`) |
+| `delay.js` | Robot | Statement | ROS2 action (`delay`) |
+| `pwmWrite.js` | Robot | Statement | ROS2 action (`pwm_write`) |
+| `odometryRead.js` | Robot | Output | ROS2 action (`odometry_read`) |
+| `odometryGet.js` | Robot | Output | Client-side (JSON field extract) |
+| `hmiSetLed.js` | HMI | Statement | Client-side (`HMI.setLED()`) |
+| `hmiSetNumber.js` | HMI | Statement | Client-side (`HMI.setNumber()`) |
+| `hmiSetText.js` | HMI | Statement | Client-side (`HMI.setText()`) |
+| `hmiSetGauge.js` | HMI | Statement | Client-side (`HMI.setGauge()`) |
+
+Each block file calls `BlockRegistry.register()` with all metadata, so the toolbox is automatically generated. See [BLOCKS.md](BLOCKS.md) for the full guide to creating blocks.

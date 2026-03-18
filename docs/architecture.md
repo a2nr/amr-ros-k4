@@ -18,7 +18,10 @@
 │  │    variables (native)│  When encountering a robot           │
 │  │  • Block highlighting│  action block, Blockly calls         │
 │  │    during execution  │  Python and WAITS for result.        │
-│  │                      │                                      │
+│  │  • HMI Panel (right) │                                      │
+│  │    LED/Number/Text/  │  Client-side blocks (print, HMI)    │
+│  │    Gauge widgets     │  call JS functions directly — no     │
+│  │                      │  ROS2 round-trip.                    │
 │  │  [Run] [Stop]        │                                      │
 │  └──────────┬───────────┘                                      │
 │             │  JS ↔ Python bridge (pywebview API)              │
@@ -115,9 +118,125 @@ This interface is **generic by design** — adding new commands never requires m
 
 ---
 
+### 2.4 HMI Panel — LabVIEW-style Front Panel
+
+Terinspirasi oleh LabVIEW yang memiliki **Front Panel** (controls & indicators) dan **Block Diagram** (visual programming). Blockly sudah menjadi "Block Diagram". HMI Panel adalah "Front Panel" — menampilkan widget indikator (LED, Number, Text, Gauge) yang dikontrol programmatically dari generated code.
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│  Toolbar: [Run] [Debug] [Step] [Stop]   [Blocks|Code]   [Save] [Open]│
+├──────────────────────────┬──────────┬──────────────────────────────────┤
+│                          │  drag ↔  │                                  │
+│    Blockly Workspace     │ divider  │     HMI Panel (gridstack.js)     │
+│                          │          │                                  │
+│  ┌─────────────────────┐ │          │  ┌──────┐ ┌──────────────────┐  │
+│  │ Main Program        │ │          │  │ LED1 │ │  Heading  [rad]  │  │
+│  │  set [odom] to ...  │ │          │  │ * ON │ │   1.57           │  │
+│  │  digital_out(17,1)  │ │          │  └──────┘ └──────────────────┘  │
+│  │  delay(1000)        │ │          │  ┌──────────────────────────┐   │
+│  └─────────────────────┘ │          │  │  Speed      [cm/s]      │   │
+│  ┌─────────────────────┐ │          │  │   42.5                  │   │
+│  │ HMI Program         │ │          │  └──────────────────────────┘   │
+│  │  HMI LED "LED1" ... │ │          │  ┌──────────────────────────┐   │
+│  │  HMI Number "Hd"..  │ │          │  │  Battery       ### 72%  │   │
+│  └─────────────────────┘ │          │  └──────────────────────────┘   │
+│                          │          │                                  │
+├──────────────────────────┴──────────┴──────────────────────────────────┤
+│  drag ↕ divider                                                        │
+├────────────────────────────────────────────────────────────────────────┤
+│  Console:  === Program started ===                                     │
+│            USER LOG >>> Hello World                                     │
+│            === Program completed ===                                   │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key components:**
+
+| Module | File | Fungsi |
+|--------|------|--------|
+| HMI Manager | `core/hmi-manager.js` | Global `HMI` object — `setLED()`, `setNumber()`, `setText()`, `setGauge()`, `clearAll()`. GridStack integration, layout serialization, mode management (design/runtime). |
+| HMI Preview | `core/hmi-preview.js` | Workspace change listener — widgets appear/disappear saat block di-place/delete (design-time preview). Reconcile function handles undo/redo edge cases. |
+| Resizable Panels | `core/resizable-panels.js` | Drag-to-resize dividers: vertical (Blockly↔HMI) dan horizontal (workspace↔console). Auto-resize Blockly canvas via `Blockly.svgResize()`. |
+
+**Two modes:**
+- **Design mode**: Grid unlocked (drag/resize widgets), preview values, dimmed appearance. Active saat tidak ada program berjalan.
+- **Runtime mode**: Grid locked, live values dari running code, bright appearance. Active saat program berjalan.
+
+**Widget types:**
+
+| Widget | JS API | Fungsi |
+|--------|--------|--------|
+| LED | `HMI.setLED(name, state, color)` | On/off indicator with configurable color |
+| Number | `HMI.setNumber(name, value, unit)` | Numeric display with unit label |
+| Text | `HMI.setText(name, text)` | Text string display |
+| Gauge | `HMI.setGauge(name, value, min, max)` | Horizontal bar gauge with range |
+
+### 2.5 Concurrent Execution — Main Program + HMI Program
+
+Saat workspace memiliki **dua program block** (`main_program` + `main_hmi_program`), keduanya berjalan bersamaan via `Promise.all()`.
+
+```
+generateCode(workspace)
+        |
+        v
+Returns { definitions, mainCode, hmiCode }
+        |
+        v
+debug-engine.js detects structured result -> _runConcurrent()
+        |
+        v
+Single execution with shared scope:
++----------------------------------------------------------+
+| (async function() {                                      |
+|   // -- Shared definitions (variables, functions) -----  |
+|   var myVar;                                             |
+|   async function myFunc() { ... }                        |
+|                                                          |
+|   var _main = (async function() {                        |
+|     // Main program -- has highlightBlock (visual+stop)  |
+|     await highlightBlock('...');                         |
+|     await executeAction('digital_out', {...});           |
+|   })();                                                  |
+|                                                          |
+|   var _hmi = (async function() {                         |
+|     // HMI program -- highlightBlock shadowed to no-op   |
+|     var highlightBlock = async function() {              |
+|       if (debugState.stopRequested) throw ...;           |
+|     };                                                   |
+|     while (!debugState.stopRequested) {                  |
+|       HMI.setLED('LED1', true, '#4caf50');              |
+|       HMI.setNumber('X', myVar);                        |
+|       await new Promise(r => setTimeout(r, 50)); //20Hz |
+|     }                                                    |
+|   })();                                                  |
+|                                                          |
+|   await _main;                  // main drives completion|
+|   debugState.stopRequested = true; // signal HMI to stop|
+|   await _hmi;                   // wait for HMI cleanup |
+| })()                                                     |
++----------------------------------------------------------+
+```
+
+**Design decisions:**
+- **Shared scope**: Definitions (variables, functions) ada di outer IIFE — kedua program share via closure. Variable yang diubah di main langsung terlihat di HMI.
+- **Main drives completion**: Saat main selesai, `stopRequested = true` -> HMI loop keluar.
+- **HMI full speed**: `highlightBlock` di-shadow ke async no-op (hanya check stop). Tidak ada visual delay.
+- **Debug mode**: Hanya main program yang memiliki stepping/breakpoints. HMI berjalan tanpa interupsi.
+
+### 2.6 Two Block Execution Models
+
+Blocks terbagi dua berdasarkan cara eksekusi:
+
+| Model | Blocks | Mechanism | Latency |
+|-------|--------|-----------|---------|
+| **ROS2 action** | `digitalOut`, `digitalIn`, `delay`, `pwmWrite`, `odometryRead` | `await executeAction()` -> Python -> ROS2 -> handler -> result | Network round-trip (~10-100ms) |
+| **Client-side** | `print`, `hmiSetLed`, `hmiSetNumber`, `hmiSetText`, `hmiSetGauge` | Direct JS function call (`consoleLog()`, `HMI.set*()`) | Instant (~0ms) |
+
+Client-side blocks **tidak membutuhkan Python handler** — generator langsung memanggil fungsi JavaScript global. Ini membuat HMI responsif karena tidak ada overhead jaringan.
+
 ---
 
-## 8. Blockly–ROS2 Integration Flow
+## 8. Blockly-ROS2 Integration Flow
 
 ### 8.1 End-to-End Execution Flow
 
@@ -183,11 +302,23 @@ User presses [Run]
 Each custom block has a **code generator** defined in its block file (e.g., [`blocks/digitalOut.js`](../src/blockly_app/blockly_app/ui/blockly/blocks/digitalOut.js)) that produces JavaScript code. For example, the `digitalOut` block with gpio=17 and state=true generates:
 
 ```javascript
-highlightBlock('block_abc123');
+await highlightBlock('block_abc123');
 await executeAction('digital_out', { gpio: '17', state: 'true' });
 ```
 
-Native Blockly blocks (loops, conditionals, variables) use Blockly's built-in JavaScript generators.
+Client-side blocks (print, HMI) generate direct JS function calls instead of `executeAction`:
+
+```javascript
+await highlightBlock('block_def456');
+consoleLog(String(' USER LOG >>> ' + myVar), 'print');
+
+await highlightBlock('block_ghi789');
+HMI.setLED('LED1', Boolean(true), '#4caf50');
+```
+
+`generateCode(ws)` (in [`async-procedures.js`](../src/blockly_app/blockly_app/ui/blockly/core/async-procedures.js)) replaces direct `workspaceToCode()`. When a `main_program` block exists, only function definitions + main body are generated. See §8.6 for full details.
+
+Native Blockly blocks (loops, conditionals) use Blockly's built-in generators. `variables_set` is overridden to add `highlightBlock()` for debug support.
 
 ### 8.3 pywebview Bridge Mechanism
 
@@ -226,10 +357,37 @@ def _wait_for_future(future, timeout_sec=30.0):
 
 When Debug Mode is enabled:
 
-1. [`runDebug()`](../src/blockly_app/blockly_app/ui/blockly/core/debug-engine.js:87) wraps `executeAction` with breakpoint checking
-2. Before each action, it checks if `debugState.currentBlockId` is in `activeBreakpoints`
-3. If a breakpoint is hit, execution pauses via a `Promise` that only resolves when the user clicks Step Over/Step Into
-4. A 300ms delay is added between blocks for visual feedback
-5. Stop sets `stopRequested = true` and resolves any pending pause Promise, causing the next `executeAction` call to throw `'STOP_EXECUTION'`
+1. [`runDebug()`](../src/blockly_app/blockly_app/ui/blockly/core/debug-engine.js:200) wraps `executeAction` with breakpoint checking
+2. `highlightBlock()` is overridden to an async version that can pause execution
+3. All pause logic lives in the async `highlightBlock()` override — this is the single pause point
+4. Pause conditions: first block, breakpoints, step-over/step-into boundaries
+5. A 300ms delay is added between blocks for visual feedback (auto-run mode)
+6. Stop sets `stopRequested = true` and resolves any pending pause Promise, causing the next `highlightBlock` call to throw `'STOP_EXECUTION'`
+
+**Call depth tracking** (for Step Over):
+- `enterFunction()` / `exitFunction()` injected around procedure calls by `async-procedures.js`
+- Step Over skips blocks deeper than `stepStartDepth` (function bodies)
+- Step Into pauses at every `highlightBlock()` regardless of depth
+
+**Concurrent debug mode** (main + HMI programs):
+- Main program: full debug stepping (breakpoints, step over/into, visual highlighting)
+- HMI program: runs uninterrupted at full speed — `highlightBlock` shadowed to async stop check
+- Both share variable scope via closure in single outer IIFE
+
+### 8.6 Code Generation Pipeline — `generateCode(ws)`
+
+[`async-procedures.js`](../src/blockly_app/blockly_app/ui/blockly/core/async-procedures.js) provides `generateCode(ws)` which replaces `workspaceToCode()`:
+
+| Workspace state | Return value | Execution path |
+|----------------|-------------|----------------|
+| No `main_program` block | Plain string (backward compatible) | `_runSingle()` |
+| `main_program` only | Plain string (definitions + main body) | `_runSingle()` |
+| `main_program` + `main_hmi_program` | `{ definitions, mainCode, hmiCode }` | `_runConcurrent()` |
+
+**Built-in generator overrides** in `async-procedures.js`:
+- `procedures_defreturn` / `procedures_defnoreturn` → generates `async function` instead of `function`
+- `procedures_callreturn` → wraps in async IIFE with `enterFunction()` / `exitFunction()`
+- `procedures_callnoreturn` → adds `await highlightBlock()` + call depth tracking
+- `variables_set` → adds `await highlightBlock()` before variable assignment
 
 ---

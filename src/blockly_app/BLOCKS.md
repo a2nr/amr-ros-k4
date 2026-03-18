@@ -899,7 +899,171 @@ BlockRegistry.register({
 
 ---
 
-### 7.15 `executeAction()` and `highlightBlock()` Reference
+### 7.15 Template E — Client-side Statement Block (no Python handler)
+
+Client-side blocks call JavaScript functions directly — no `executeAction()`, no Python handler, no ROS2 round-trip. Used for **print** (console output) and **HMI widgets** (LED, Number, Text, Gauge).
+
+**Print block** — calls `consoleLog()` directly:
+
+```js
+// src/blockly_app/blockly_app/ui/blockly/blocks/print.js
+
+BlockRegistry.register({
+  name: 'print',
+  category: 'Program',
+  categoryColor: '#FF9800',
+  color: '#FFCA28',
+  tooltip: 'Print a value to the console for debugging',
+
+  definition: {
+    init: function () {
+      this.appendValueInput('TEXT')
+        .appendField('Print');
+      this.setPreviousStatement(true, null);
+      this.setNextStatement(true, null);
+      this.setColour('#FFCA28');
+      this.setTooltip('Print a value to the console for debugging');
+    },
+  },
+
+  generator: function (block) {
+    var value = Blockly.JavaScript.valueToCode(
+      block, 'TEXT', Blockly.JavaScript.ORDER_ATOMIC
+    ) || "''";
+    return (
+      "await highlightBlock('" + block.id + "');\n" +
+      "consoleLog(String( ' USER LOG >>> ' + " + value + "), 'print');\n"
+    //  ^^^^^^^^^^^^^^^^ direct JS function call — no executeAction!
+    );
+  },
+});
+```
+
+**No Python handler needed.** The block works entirely in the browser. Add the JS filename to `manifest.js` and it's done.
+
+---
+
+### 7.16 Template F — HMI Widget Block (client-side, design-time preview)
+
+HMI blocks create/update widgets in the HMI Panel. They call `HMI.set*()` functions directly (client-side) and support design-time preview — widgets appear when blocks are placed, not just at runtime.
+
+**HMI LED block:**
+
+```js
+// src/blockly_app/blockly_app/ui/blockly/blocks/hmiSetLed.js
+
+BlockRegistry.register({
+  name: 'hmiSetLed',
+  category: 'HMI',
+  categoryColor: '#00BCD4',
+  color: '#00BCD4',
+  tooltip: 'Set an LED indicator on/off in the HMI panel',
+
+  definition: {
+    init: function () {
+      this.appendValueInput('STATE')
+        .appendField('HMI LED')
+        .appendField(new Blockly.FieldTextInput('LED1'), 'NAME')
+        .appendField('color')
+        .appendField(new Blockly.FieldDropdown([
+          ['green', '#4caf50'],
+          ['red', '#f44336'],
+          ['yellow', '#ffeb3b'],
+          ['blue', '#2196f3'],
+          ['orange', '#ff9800'],
+          ['white', '#ffffff'],
+        ]), 'COLOR')
+        .setCheck('Boolean')
+        .appendField('state:');
+      this.setPreviousStatement(true, null);
+      this.setNextStatement(true, null);
+      this.setColour('#00BCD4');
+      this.setTooltip('Set an LED indicator on/off in the HMI panel');
+    },
+  },
+
+  generator: function (block) {
+    var name = block.getFieldValue('NAME');
+    var color = block.getFieldValue('COLOR');
+    var state = Blockly.JavaScript.valueToCode(
+      block, 'STATE', Blockly.JavaScript.ORDER_ATOMIC
+    ) || 'false';
+    return (
+      "await highlightBlock('" + block.id + "');\n" +
+      "HMI.setLED('" + name + "', Boolean(" + state + "), '" + color + "');\n"
+    //  ^^^^^^^^^^ direct call to HMI manager — no executeAction!
+    );
+  },
+});
+```
+
+**HMI Number block** — numeric display with unit:
+
+```js
+generator: function (block) {
+    var name = block.getFieldValue('NAME');
+    var unit = block.getFieldValue('UNIT');
+    var value = Blockly.JavaScript.valueToCode(
+      block, 'VALUE', Blockly.JavaScript.ORDER_ATOMIC
+    ) || '0';
+    return (
+      "await highlightBlock('" + block.id + "');\n" +
+      "HMI.setNumber('" + name + "', Number(" + value + "), '" + unit + "');\n"
+    );
+  },
+```
+
+**HMI Gauge block** — bar gauge with min/max:
+
+```js
+generator: function (block) {
+    var name = block.getFieldValue('NAME');
+    var min = block.getFieldValue('MIN');
+    var max = block.getFieldValue('MAX');
+    var value = Blockly.JavaScript.valueToCode(
+      block, 'VALUE', Blockly.JavaScript.ORDER_ATOMIC
+    ) || '0';
+    return (
+      "await highlightBlock('" + block.id + "');\n" +
+      "HMI.setGauge('" + name + "', Number(" + value + "), " + min + ", " + max + ");\n"
+    );
+  },
+```
+
+**Key differences from ROS2 action blocks:**
+- Generator calls `HMI.set*()` instead of `executeAction()`
+- No Python handler file needed
+- Widgets get design-time preview via `hmi-preview.js` (auto-detected by block type)
+- All HMI blocks use `FieldTextInput('Name')` for widget identifier (`NAME` field)
+- Category: `HMI`, color: `#00BCD4`
+
+**Adding a new HMI widget type:**
+1. Add render function `_renderFoo(body, widget)` in `core/hmi-manager.js`
+2. Add public API method `setFoo(name, ...)` that stores state and calls `_scheduleRender(name)`
+3. Add `case 'foo':` to the `_render()` switch
+4. Create block file `blocks/hmiFoo.js` — generator calls `HMI.setFoo(...)`
+5. Add to `manifest.js`
+6. Add entry to `HMI_BLOCK_TYPES` in `core/hmi-preview.js` for design-time preview
+
+---
+
+### 7.17 Block Type Overview — All Categories
+
+| Category | Blocks | Execution Model |
+|----------|--------|-----------------|
+| **Program** | `main_program`, `main_hmi_program`, `print` | Entry points / client-side |
+| **Robot** | `digitalOut`, `digitalIn`, `delay`, `pwmWrite`, `odometryRead`, `odometryGet` | ROS2 action (except `odometryGet`) |
+| **HMI** | `hmiSetLed`, `hmiSetNumber`, `hmiSetText`, `hmiSetGauge` | Client-side (`HMI.set*()`) |
+| **Logic** | `controls_if`, `logic_compare`, `logic_operation`, `logic_boolean` | Built-in Blockly |
+| **Loops** | `controls_repeat_ext`, `controls_whileUntil` | Built-in Blockly |
+| **Math** | `math_number`, `math_arithmetic` | Built-in Blockly |
+| **Text** | `text`, `text_join`, `text_length` | Built-in Blockly |
+| **Variables** | `variables_set`, `variables_get` | Built-in Blockly (with highlight override) |
+| **Functions** | `procedures_defnoreturn`, `procedures_callnoreturn`, etc. | Built-in Blockly (with async override) |
+
+---
+
+### 7.18 `executeAction()` and `highlightBlock()` Reference
 
 Both functions are provided by [bridge.js](blockly_app/ui/blockly/core/bridge.js) and injected into the eval context by [debug-engine.js](blockly_app/ui/blockly/core/debug-engine.js).
 
@@ -932,7 +1096,7 @@ Visually highlights the currently executing block in the workspace. Call it **fi
 
 ---
 
-### 7.16 Quick Reference: Blockly Field Types
+### 7.19 Quick Reference: Blockly Field Types
 
 | Field | Constructor | Returns | Use Case |
 |-------|-------------|---------|----------|
@@ -948,7 +1112,7 @@ All field values retrieved via `block.getFieldValue('FIELD_NAME')` are **strings
 
 ---
 
-### 7.17 Quick Reference: Input and Connection Types
+### 7.20 Quick Reference: Input and Connection Types
 
 | Method | What it creates | When to use |
 |--------|----------------|-------------|
@@ -963,7 +1127,7 @@ All field values retrieved via `block.getFieldValue('FIELD_NAME')` are **strings
 
 ---
 
-### 7.18 Naming Conventions
+### 7.21 Naming Conventions
 
 | Item | Convention | Example |
 |------|-----------|---------|
@@ -976,11 +1140,14 @@ All field values retrieved via `block.getFieldValue('FIELD_NAME')` are **strings
 
 ---
 
-### 7.19 Step-by-Step Checklist — Adding a New Block
+### 7.22 Step-by-Step Checklist — Adding a New Block
+
+**Path A — ROS2 Action Block** (robot commands, sensor reads):
 
 ```
 1. Create  src/blockly_app/…/ui/blockly/blocks/<name>.js
            └─ Call BlockRegistry.register({ name, category, color, definition, generator })
+           └─ generator calls await executeAction('name', { key: 'value' })
            └─ name must exactly match the Python @handler string
 
 2. Edit    src/blockly_app/…/ui/blockly/blocks/manifest.js
@@ -996,6 +1163,20 @@ All field values retrieved via `block.getFieldValue('FIELD_NAME')` are **strings
 4. Test    pixi run executor   (Terminal 1)
            pixi run app        (Terminal 2) — drag block, click Run
            pixi run test -- src/blockly_executor/test/test_block_<name>.py -v
+```
+
+**Path B — Client-side Block** (print, HMI, pure JS):
+
+```
+1. Create  src/blockly_app/…/ui/blockly/blocks/<name>.js
+           └─ Call BlockRegistry.register({ name, category, color, definition, generator })
+           └─ generator calls JS function directly (consoleLog(), HMI.set*(), etc.)
+           └─ NO executeAction(), NO Python handler needed
+
+2. Edit    src/blockly_app/…/ui/blockly/blocks/manifest.js
+           └─ Add '<name>.js' to the BLOCK_FILES array
+
+3. Test    pixi run app — drag block, click Run (no executor needed for client-side blocks)
 ```
 
 No changes needed to `index.html`, `executor_node.py`, `handlers/__init__.py`, or `BlocklyAction.action`.

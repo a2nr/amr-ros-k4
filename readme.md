@@ -36,7 +36,7 @@ jelaskan apa yang dimaksut untuk menyelesaikan task
 
 # Potential Enhancements
 this list is short by priority
-- **Blockly UI Enhancement**: 
+- **add more block in HMI**: i like to add block button, slider, and switch
 - **Feasibility Study to implement Controller**: mobile robot need controller to move flawlesly.
 - **Launch files**: ROS2 launch files to start all nodes with one command includ node in raspberry pi
 - **Simulation**: Integrate with Gazebo/Isaac Sim for testing Kiwi Wheel kinematics before deploying to hardware
