@@ -86,6 +86,20 @@ async function _runSingle(code) {
   debugState.stopRequested = false;
   updateButtonStates();
 
+  // Override highlightBlock — yields to macrotask queue periodically (~60Hz)
+  // so while(true) loops don't starve the event loop (Stop button, UI paint).
+  var originalHighlight = window.highlightBlock;
+  var _lastYield = Date.now();
+  window.highlightBlock = async function (blockId) {
+    if (debugState.stopRequested) throw new Error('STOP_EXECUTION');
+    originalHighlight(blockId);
+    var now = Date.now();
+    if (now - _lastYield >= 16) {
+      _lastYield = now;
+      await new Promise(function (r) { setTimeout(r, 0); });
+    }
+  };
+
   HMI.setMode('runtime');
   consoleLog('=== Program started ===', 'info');
 
@@ -102,6 +116,7 @@ async function _runSingle(code) {
       consoleLog('Error: ' + e.message, 'error');
     }
   } finally {
+    window.highlightBlock = originalHighlight;
     debugState.isRunning = false;
     debugState.isPaused = false;
     workspace.highlightBlock(null);
@@ -129,11 +144,21 @@ async function _runConcurrent(codeResult) {
   debugState.stopRequested = false;
   updateButtonStates();
 
-  // Override highlightBlock for main program — visual feedback + stop check
+  // Override highlightBlock for main program — visual feedback + stop check.
+  // Periodically yields to the macrotask queue (~60Hz) so the browser can
+  // process click events, paint, and let the HMI loop run via setTimeout.
+  // Without this, while(true) loops with only sync operations would starve
+  // the event loop (await on microtask never yields to macrotask queue).
   var originalHighlight = window.highlightBlock;
+  var _lastYield = Date.now();
   window.highlightBlock = async function (blockId) {
     if (debugState.stopRequested) throw new Error('STOP_EXECUTION');
     originalHighlight(blockId);
+    var now = Date.now();
+    if (now - _lastYield >= 16) {
+      _lastYield = now;
+      await new Promise(function (r) { setTimeout(r, 0); });
+    }
   };
 
   HMI.setMode('runtime');

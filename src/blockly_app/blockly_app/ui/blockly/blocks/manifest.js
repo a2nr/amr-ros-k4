@@ -22,4 +22,10 @@ const BLOCK_FILES = [
   'hmiSetNumber.js',
   'hmiSetText.js',
   'hmiSetGauge.js',
+  'hmiSetButton.js',
+  'hmiSetSlider.js',
+  'hmiSetSwitch.js',
+  'hmiGetButton.js',
+  'hmiGetSlider.js',
+  'hmiGetSwitch.js',
 ];

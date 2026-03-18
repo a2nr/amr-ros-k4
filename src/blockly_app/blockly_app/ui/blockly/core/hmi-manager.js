@@ -25,6 +25,9 @@ const HMI = (() => {
     number: [2, 1],
     text: [3, 1],
     gauge: [3, 2],
+    button: [2, 1],
+    slider: [3, 1],
+    switch: [2, 1],
   };
 
   // Throttle rendering
@@ -197,6 +200,18 @@ const HMI = (() => {
         var mid = ((widget.min || 0) + (widget.max || 100)) / 2;
         widget.value = mid;
         break;
+      case 'button':
+        widget._pressed = false;
+        break;
+      case 'slider':
+        widget._userValue = ((widget.min || 0) + (widget.max || 100)) / 2;
+        widget._userInteracting = false;
+        widget._userHasInteracted = false;
+        break;
+      case 'switch':
+        widget.state = false;
+        delete widget._userState;
+        break;
     }
     _scheduleRender(name);
   }
@@ -222,6 +237,8 @@ const HMI = (() => {
       if (widget.type === 'led') config.color = widget.color;
       if (widget.type === 'number') config.unit = widget.unit;
       if (widget.type === 'gauge') { config.min = widget.min; config.max = widget.max; }
+      if (widget.type === 'button') { config.label = widget.label; config.color = widget.color; }
+      if (widget.type === 'slider') { config.min = widget.min; config.max = widget.max; }
 
       items.push({
         name: name,
@@ -268,8 +285,14 @@ const HMI = (() => {
     var widget = _widgets.get(name);
     if (!widget) return;
 
+    // Skip render if user is actively dragging slider
+    if (widget.type === 'slider' && widget._userInteracting) return;
+
     var el = _getWidgetEl(name);
     if (!el) return;
+
+    // Store name for event handlers that need to trigger re-render
+    widget._renderName = name;
 
     // Clear previous content
     el.textContent = '';
@@ -296,6 +319,15 @@ const HMI = (() => {
         break;
       case 'gauge':
         _renderGauge(body, widget);
+        break;
+      case 'button':
+        _renderButton(body, widget);
+        break;
+      case 'slider':
+        _renderSlider(body, widget);
+        break;
+      case 'switch':
+        _renderSwitch(body, widget);
         break;
       default:
         body.textContent = 'Unknown widget type';
@@ -370,6 +402,87 @@ const HMI = (() => {
     body.appendChild(labels);
   }
 
+  function _renderButton(body, widget) {
+    var btn = document.createElement('button');
+    btn.className = 'hmi-button';
+    btn.textContent = widget.label || 'Press';
+    btn.style.backgroundColor = widget.color || '#2196f3';
+    if (_mode === 'runtime') {
+      btn.addEventListener('pointerdown', function () {
+        widget._pressed = true;
+      });
+    } else {
+      btn.disabled = true;
+    }
+    body.appendChild(btn);
+  }
+
+  function _renderSlider(body, widget) {
+    var min = widget.min || 0;
+    var max = widget.max || 100;
+    var val = widget._userValue !== undefined ? widget._userValue : (widget.value || 0);
+    val = Math.max(min, Math.min(max, Number(val)));
+
+    var row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.alignItems = 'center';
+
+    var slider = document.createElement('input');
+    slider.type = 'range';
+    slider.className = 'hmi-slider';
+    slider.min = min;
+    slider.max = max;
+    slider.step = (max - min) <= 1 ? '0.01' : '1';
+    slider.value = val;
+
+    var valLabel = document.createElement('span');
+    valLabel.className = 'hmi-slider-value';
+    valLabel.textContent = String(val);
+
+    if (_mode === 'runtime') {
+      slider.addEventListener('input', function () {
+        widget._userValue = Number(slider.value);
+        widget._userHasInteracted = true;
+        valLabel.textContent = String(slider.value);
+      });
+      slider.addEventListener('mousedown', function () { widget._userInteracting = true; });
+      slider.addEventListener('touchstart', function () { widget._userInteracting = true; });
+      slider.addEventListener('mouseup', function () { widget._userInteracting = false; });
+      slider.addEventListener('touchend', function () { widget._userInteracting = false; });
+    } else {
+      slider.disabled = true;
+    }
+
+    row.appendChild(slider);
+    row.appendChild(valLabel);
+    body.appendChild(row);
+  }
+
+  function _renderSwitch(body, widget) {
+    var current = widget._userState !== undefined ? widget._userState : widget.state;
+    var track = document.createElement('div');
+    track.className = 'hmi-switch-track' + (current ? ' on' : '');
+
+    var thumb = document.createElement('div');
+    thumb.className = 'hmi-switch-thumb';
+    track.appendChild(thumb);
+
+    var label = document.createElement('span');
+    label.className = 'hmi-switch-label';
+    label.textContent = current ? 'ON' : 'OFF';
+
+    if (_mode === 'runtime') {
+      track.addEventListener('pointerdown', function () {
+        var cur = widget._userState !== undefined ? widget._userState : widget.state;
+        widget._userState = !cur;
+        _scheduleRender(widget._renderName);
+      });
+    }
+
+    body.appendChild(track);
+    body.appendChild(label);
+  }
+
   // ─── Public API (called from generated Blockly code) ──────────────────
 
   function setLED(name, state, color) {
@@ -416,6 +529,70 @@ const HMI = (() => {
     }
   }
 
+  // ─── Interactive widget setters ──────────────────────────────────────
+
+  function setButton(name, label, color) {
+    var existing = _widgets.get(name);
+    if (existing) {
+      existing.label = label || existing.label || 'Press';
+      existing.color = color || existing.color || '#2196f3';
+      _scheduleRender(name);
+    } else {
+      addWidget(name, 'button', { label: label || 'Press', color: color || '#2196f3', _pressed: false });
+    }
+  }
+
+  function setSlider(name, value, min, max) {
+    var existing = _widgets.get(name);
+    if (existing) {
+      existing.min = min;
+      existing.max = max;
+      // Only update display value if user has never interacted
+      if (!existing._userInteracting && !existing._userHasInteracted) {
+        existing._userValue = value;
+        _scheduleRender(name);
+      }
+      existing.value = value;
+    } else {
+      addWidget(name, 'slider', { value: value, min: min, max: max, _userValue: value, _userInteracting: false, _userHasInteracted: false });
+    }
+  }
+
+  function setSwitch(name, state) {
+    var existing = _widgets.get(name);
+    if (existing) {
+      existing.state = Boolean(state);
+      // Only re-render if user hasn't interacted yet
+      if (existing._userState === undefined) {
+        _scheduleRender(name);
+      }
+    } else {
+      addWidget(name, 'switch', { state: Boolean(state) });
+    }
+  }
+
+  // ─── Interactive widget getters ──────────────────────────────────────
+
+  function getButton(name) {
+    var widget = _widgets.get(name);
+    if (!widget) return false;
+    var pressed = Boolean(widget._pressed);
+    widget._pressed = false;  // latch-until-read
+    return pressed;
+  }
+
+  function getSlider(name) {
+    var widget = _widgets.get(name);
+    if (!widget) return 0;
+    return Number(widget._userValue !== undefined ? widget._userValue : widget.value);
+  }
+
+  function getSwitch(name) {
+    var widget = _widgets.get(name);
+    if (!widget) return false;
+    return Boolean(widget._userState !== undefined ? widget._userState : widget.state);
+  }
+
   /**
    * Remove all widgets and reset grid.
    */
@@ -430,6 +607,8 @@ const HMI = (() => {
   return {
     init, addWidget, removeWidget, updateWidget,
     setMode, getMode, getLayout, loadLayout,
-    setLED, setNumber, setText, setGauge, clearAll,
+    setLED, setNumber, setText, setGauge,
+    setButton, getButton, setSlider, getSlider, setSwitch, getSwitch,
+    clearAll,
   };
 })();

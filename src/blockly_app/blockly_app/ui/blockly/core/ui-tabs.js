@@ -59,5 +59,5 @@ function refreshCodePanel() {
     display = typeof codeResult === 'string' ? codeResult : '';
   }
 
-  document.getElementById('code-output').textContent = display || '// (no blocks)';
+  document.getElementById('code-output').value = display || '// (no blocks)';
 }

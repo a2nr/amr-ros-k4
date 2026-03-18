@@ -1,0 +1,358 @@
+{
+  "workspace": {
+    "blocks": {
+      "languageVersion": 0,
+      "blocks": [
+        {
+          "type": "main_program",
+          "id": "FwZNMjJgJ)7HoDA$5w.;",
+          "x": 10,
+          "y": 250,
+          "inputs": {
+            "BODY": {
+              "block": {
+                "type": "variables_set",
+                "id": "jq.DqU:AzS]6s/=;P5n)",
+                "fields": {
+                  "VAR": {
+                    "id": "Egl#Lg:b:#oT8py7HNji"
+                  }
+                },
+                "inputs": {
+                  "VALUE": {
+                    "block": {
+                      "type": "math_number",
+                      "id": "%M3jtK*#Dl$Jk,IMAHYw",
+                      "fields": {
+                        "NUM": 0
+                      }
+                    }
+                  }
+                },
+                "next": {
+                  "block": {
+                    "type": "print",
+                    "id": "[wR+UihNLips(NA%h9`_",
+                    "inputs": {
+                      "TEXT": {
+                        "block": {
+                          "type": "text",
+                          "id": "aqU+];u/*%~8.k8bdz4V",
+                          "fields": {
+                            "TEXT": "press buttonn to start"
+                          }
+                        }
+                      }
+                    },
+                    "next": {
+                      "block": {
+                        "type": "controls_whileUntil",
+                        "id": "//-l#r#1N5TDLuN+#zx1",
+                        "fields": {
+                          "MODE": "WHILE"
+                        },
+                        "inputs": {
+                          "BOOL": {
+                            "block": {
+                              "type": "logic_compare",
+                              "id": "5Dy3Mnq[_?Fmme`41wi{",
+                              "fields": {
+                                "OP": "NEQ"
+                              },
+                              "inputs": {
+                                "A": {
+                                  "block": {
+                                    "type": "hmiGetButton",
+                                    "id": "b|}/Rl9Y}1N.PpvdAwa1",
+                                    "fields": {
+                                      "NAME": "Btn1"
+                                    }
+                                  }
+                                },
+                                "B": {
+                                  "block": {
+                                    "type": "logic_boolean",
+                                    "id": "FRS+]Kg{aBCBK.+WNc|@",
+                                    "fields": {
+                                      "BOOL": "TRUE"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "DO": {
+                            "block": {
+                              "type": "delay",
+                              "id": "zI{i7r}Tw4ywwzOf*YSn",
+                              "fields": {
+                                "DURATION_MS": 500
+                              }
+                            }
+                          }
+                        },
+                        "next": {
+                          "block": {
+                            "type": "controls_whileUntil",
+                            "id": "4*{fL8MMBf/C:G0q}M6[",
+                            "fields": {
+                              "MODE": "WHILE"
+                            },
+                            "inputs": {
+                              "BOOL": {
+                                "block": {
+                                  "type": "logic_boolean",
+                                  "id": "Uf(_X29G;xDO4Isn`XPq",
+                                  "fields": {
+                                    "BOOL": "TRUE"
+                                  }
+                                }
+                              },
+                              "DO": {
+                                "block": {
+                                  "type": "variables_set",
+                                  "id": "5.J3m#77vjYS3JBRJ{@3",
+                                  "fields": {
+                                    "VAR": {
+                                      "id": "Egl#Lg:b:#oT8py7HNji"
+                                    }
+                                  },
+                                  "inputs": {
+                                    "VALUE": {
+                                      "block": {
+                                        "type": "hmiGetSlider",
+                                        "id": "Kh)UlG`=^iajkCHO+cb9",
+                                        "fields": {
+                                          "NAME": "Slider1"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "next": {
+                                    "block": {
+                                      "type": "variables_set",
+                                      "id": ".,zM~oP,:yQiM{qn0KRG",
+                                      "fields": {
+                                        "VAR": {
+                                          "id": "bPB1tcV1*$)p4V+TC:iO"
+                                        }
+                                      },
+                                      "inputs": {
+                                        "VALUE": {
+                                          "block": {
+                                            "type": "hmiGetSwitch",
+                                            "id": "=a=-/mx/QldA)%JCB=C=",
+                                            "fields": {
+                                              "NAME": "Switch1"
+                                            }
+                                          }
+                                        }
+                                      },
+                                      "next": {
+                                        "block": {
+                                          "type": "delay",
+                                          "id": "yP/~i8^p/`Ez.![mkDa@",
+                                          "fields": {
+                                            "DURATION_MS": 500
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "main_hmi_program",
+          "id": "aQ23Jgk4vutyFR7Uf@F9",
+          "x": 650,
+          "y": 190,
+          "inputs": {
+            "BODY": {
+              "block": {
+                "type": "hmiSetButton",
+                "id": "`M)|pBM2F6eliBk[dl2N",
+                "fields": {
+                  "NAME": "Btn1",
+                  "LABEL": "Press",
+                  "COLOR": "#2196f3"
+                },
+                "next": {
+                  "block": {
+                    "type": "hmiSetLed",
+                    "id": "DMUx+:TEc%RvY6|sScm,",
+                    "fields": {
+                      "NAME": "LED1",
+                      "COLOR": "#4caf50"
+                    },
+                    "inputs": {
+                      "STATE": {
+                        "block": {
+                          "type": "variables_get",
+                          "id": "aGXray@ADZEW0!1mQ$8k",
+                          "fields": {
+                            "VAR": {
+                              "id": "bPB1tcV1*$)p4V+TC:iO"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "next": {
+                      "block": {
+                        "type": "hmiSetSwitch",
+                        "id": "~Aaps.COC1?b%FuVndIr",
+                        "fields": {
+                          "NAME": "Switch1"
+                        },
+                        "inputs": {
+                          "STATE": {
+                            "block": {
+                              "type": "variables_get",
+                              "id": "y1--K#B+PYZWO}[}rh?Z",
+                              "fields": {
+                                "VAR": {
+                                  "id": "bPB1tcV1*$)p4V+TC:iO"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "next": {
+                          "block": {
+                            "type": "hmiSetSlider",
+                            "id": "(5vus?:c@2QsU=MsdGGy",
+                            "fields": {
+                              "NAME": "Slider1",
+                              "MIN": 0,
+                              "MAX": 100
+                            },
+                            "inputs": {
+                              "VALUE": {
+                                "block": {
+                                  "type": "variables_get",
+                                  "id": "P$)Ot7t0iM5M(Z#iu98]",
+                                  "fields": {
+                                    "VAR": {
+                                      "id": "Egl#Lg:b:#oT8py7HNji"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "next": {
+                              "block": {
+                                "type": "hmiSetGauge",
+                                "id": "+1},^Hibu{ls;[e1?yvQ",
+                                "fields": {
+                                  "NAME": "Gauge1",
+                                  "MIN": 0,
+                                  "MAX": 100
+                                },
+                                "inputs": {
+                                  "VALUE": {
+                                    "block": {
+                                      "type": "variables_get",
+                                      "id": "?[`BA?SK]j;z](3EU2AQ",
+                                      "fields": {
+                                        "VAR": {
+                                          "id": "Egl#Lg:b:#oT8py7HNji"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "variables": [
+      {
+        "name": "led",
+        "id": "bPB1tcV1*$)p4V+TC:iO"
+      },
+      {
+        "name": "slide",
+        "id": "Egl#Lg:b:#oT8py7HNji"
+      }
+    ]
+  },
+  "hmiLayout": [
+    {
+      "name": "Btn1",
+      "type": "button",
+      "x": 2,
+      "y": 0,
+      "w": 2,
+      "h": 1,
+      "config": {
+        "label": "Press",
+        "color": "#2196f3"
+      }
+    },
+    {
+      "name": "LED1",
+      "type": "led",
+      "x": 0,
+      "y": 0,
+      "w": 2,
+      "h": 1,
+      "config": {
+        "color": "#4caf50"
+      }
+    },
+    {
+      "name": "Switch1",
+      "type": "switch",
+      "x": 4,
+      "y": 0,
+      "w": 2,
+      "h": 1,
+      "config": {}
+    },
+    {
+      "name": "Slider1",
+      "type": "slider",
+      "x": 0,
+      "y": 1,
+      "w": 3,
+      "h": 1,
+      "config": {
+        "min": 0,
+        "max": 100
+      }
+    },
+    {
+      "name": "Gauge1",
+      "type": "gauge",
+      "x": 3,
+      "y": 1,
+      "w": 3,
+      "h": 2,
+      "config": {
+        "min": 0,
+        "max": 100
+      }
+    }
+  ]
+}

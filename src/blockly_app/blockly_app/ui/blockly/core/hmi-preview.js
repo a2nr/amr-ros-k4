@@ -19,7 +19,35 @@ function initHMIPreview(ws) {
     hmiSetNumber: 'number',
     hmiSetText: 'text',
     hmiSetGauge: 'gauge',
+    hmiSetButton: 'button',
+    hmiSetSlider: 'slider',
+    hmiSetSwitch: 'switch',
   };
+
+  // Name prefixes for auto-increment (extracted from default field values)
+  var _namePrefixPattern = /^(.+?)(\d+)$/;
+
+  /**
+   * Generate a unique widget name by auto-incrementing the numeric suffix.
+   * e.g., if 'LED1' is taken, returns 'LED2', then 'LED3', etc.
+   */
+  function _uniqueName(baseName) {
+    var taken = false;
+    _blockToWidget.forEach(function (n) { if (n === baseName) taken = true; });
+    if (!taken) return baseName;
+
+    var match = _namePrefixPattern.exec(baseName);
+    var prefix = match ? match[1] : baseName;
+    var counter = match ? Number(match[2]) : 1;
+
+    while (true) {
+      counter++;
+      var candidate = prefix + counter;
+      var used = false;
+      _blockToWidget.forEach(function (n) { if (n === candidate) used = true; });
+      if (!used) return candidate;
+    }
+  }
 
   // Default preview configs per widget type
   var _previewDefaults = {
@@ -27,6 +55,9 @@ function initHMIPreview(ws) {
     number: { value: '---', unit: '' },
     text: { text: '' },
     gauge: { value: 50, min: 0, max: 100 },
+    button: { label: 'Press', color: '#2196f3', _pressed: false },
+    slider: { value: 50, min: 0, max: 100, _userValue: 50, _userInteracting: false },
+    switch: { state: false },
   };
 
   /**
@@ -48,6 +79,16 @@ function initHMIPreview(ws) {
       config.value = (config.min + config.max) / 2;
     } else if (type === 'text') {
       config.text = name || '';
+    } else if (type === 'button') {
+      config.label = block.getFieldValue('LABEL') || 'Press';
+      config.color = block.getFieldValue('COLOR') || '#2196f3';
+    } else if (type === 'slider') {
+      config.min = Number(block.getFieldValue('MIN')) || 0;
+      config.max = Number(block.getFieldValue('MAX')) || 100;
+      config.value = (config.min + config.max) / 2;
+      config._userValue = config.value;
+    } else if (type === 'switch') {
+      config.state = false;
     }
 
     return { name: name, config: config };
@@ -89,6 +130,13 @@ function initHMIPreview(ws) {
       var info = _readBlockConfig(block);
       var name = info.name || block.type + '_' + block.id.substring(0, 4);
 
+      // Auto-increment name if already taken by another block
+      var uniqueName = _uniqueName(name);
+      if (uniqueName !== name) {
+        block.setFieldValue(uniqueName, 'NAME');
+        name = uniqueName;
+      }
+
       _blockToWidget.set(block.id, name);
       HMI.addWidget(name, type, info.config, block.id);
     }
@@ -99,10 +147,17 @@ function initHMIPreview(ws) {
     var ids = event.ids || [event.blockId];
 
     for (var i = 0; i < ids.length; i++) {
-      var name = _blockToWidget.get(ids[i]);
+      var deletedId = ids[i];
+      var name = _blockToWidget.get(deletedId);
       if (name) {
-        HMI.removeWidget(name);
-        _blockToWidget.delete(ids[i]);
+        _blockToWidget.delete(deletedId);
+
+        // Only remove widget if no other block still uses this name
+        var stillUsed = false;
+        _blockToWidget.forEach(function (n) { if (n === name) stillUsed = true; });
+        if (!stillUsed) {
+          HMI.removeWidget(name);
+        }
       }
     }
   }

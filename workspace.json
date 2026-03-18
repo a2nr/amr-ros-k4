@@ -12,160 +12,187 @@
             "BODY": {
               "block": {
                 "type": "controls_whileUntil",
-                "id": "qWwrS*25QaeI4eIwq+~%",
+                "id": "$uyZgjkMX%3!oZkaV{:v",
                 "fields": {
                   "MODE": "WHILE"
                 },
                 "inputs": {
                   "BOOL": {
                     "block": {
-                      "type": "logic_boolean",
-                      "id": "iL:?Vnm{E8Pa6(SX-nEl",
+                      "type": "logic_compare",
+                      "id": ".qR|JeS~%Aq7^G/.FC5$",
                       "fields": {
-                        "BOOL": "TRUE"
+                        "OP": "NEQ"
+                      },
+                      "inputs": {
+                        "A": {
+                          "block": {
+                            "type": "hmiGetButton",
+                            "id": "$IXubt[ys3S3jc`.w5F0",
+                            "fields": {
+                              "NAME": "Btn1"
+                            }
+                          }
+                        },
+                        "B": {
+                          "block": {
+                            "type": "logic_boolean",
+                            "id": ")Uq|v]]Tho:rGgn1ik{H",
+                            "fields": {
+                              "BOOL": "TRUE"
+                            }
+                          }
+                        }
                       }
                     }
                   },
                   "DO": {
                     "block": {
-                      "type": "variables_set",
-                      "id": "vCG[_})zpGPcSQBid!Yj",
+                      "type": "delay",
+                      "id": "CY3QgWQ(jalnV(6VA:.w",
                       "fields": {
-                        "VAR": {
-                          "id": "C_:{ED@bJimgLzEmC6(`"
-                        }
-                      },
-                      "inputs": {
-                        "VALUE": {
-                          "block": {
-                            "type": "math_number",
-                            "id": "!uHp`,,`q_M2%HMnG0@[",
-                            "fields": {
-                              "NUM": 0
-                            }
+                        "DURATION_MS": 500
+                      }
+                    }
+                  }
+                },
+                "next": {
+                  "block": {
+                    "type": "controls_whileUntil",
+                    "id": "qWwrS*25QaeI4eIwq+~%",
+                    "fields": {
+                      "MODE": "WHILE"
+                    },
+                    "inputs": {
+                      "BOOL": {
+                        "block": {
+                          "type": "logic_boolean",
+                          "id": "iL:?Vnm{E8Pa6(SX-nEl",
+                          "fields": {
+                            "BOOL": "TRUE"
                           }
                         }
                       },
-                      "next": {
+                      "DO": {
                         "block": {
                           "type": "variables_set",
-                          "id": "qzDOA-}@MU,]iqj`er}D",
+                          "id": "vCG[_})zpGPcSQBid!Yj",
                           "fields": {
                             "VAR": {
-                              "id": "[g,f6Mp!O$eZPCFs0U[H"
+                              "id": "C_:{ED@bJimgLzEmC6(`"
                             }
                           },
                           "inputs": {
                             "VALUE": {
                               "block": {
                                 "type": "math_number",
-                                "id": "39KE0jn61fTR1Qp4)d57",
+                                "id": "!uHp`,,`q_M2%HMnG0@[",
                                 "fields": {
-                                  "NUM": 500
+                                  "NUM": 0
                                 }
                               }
                             }
                           },
                           "next": {
                             "block": {
-                              "type": "digitalOut",
-                              "id": "Cz1MB5`}~cPRiZhh$/P9",
+                              "type": "variables_set",
+                              "id": "qzDOA-}@MU,]iqj`er}D",
                               "fields": {
-                                "GPIO": 17
+                                "VAR": {
+                                  "id": "[g,f6Mp!O$eZPCFs0U[H"
+                                }
                               },
                               "inputs": {
-                                "digitalOut": {
+                                "VALUE": {
                                   "block": {
-                                    "type": "procedures_callreturn",
-                                    "id": "U|7!ynVp5Z.nwD_`4=Z,",
-                                    "extraState": {
-                                      "name": "foo",
-                                      "params": [
-                                        "logic"
-                                      ]
-                                    },
-                                    "inputs": {
-                                      "ARG0": {
-                                        "block": {
-                                          "type": "logic_boolean",
-                                          "id": "HXRaHRaPE)[G3WGmOi-T",
-                                          "fields": {
-                                            "BOOL": "TRUE"
-                                          }
-                                        }
-                                      }
+                                    "type": "math_number",
+                                    "id": "39KE0jn61fTR1Qp4)d57",
+                                    "fields": {
+                                      "NUM": 500
                                     }
                                   }
                                 }
                               },
                               "next": {
                                 "block": {
-                                  "type": "variables_set",
-                                  "id": "5WG|J40M0!L^mM5x_2@N",
+                                  "type": "digitalOut",
+                                  "id": "Cz1MB5`}~cPRiZhh$/P9",
                                   "fields": {
-                                    "VAR": {
-                                      "id": "xjE5n-FetBK*,)qj?pyn"
-                                    }
+                                    "GPIO": 17
                                   },
                                   "inputs": {
-                                    "VALUE": {
+                                    "digitalOut": {
                                       "block": {
-                                        "type": "text",
-                                        "id": "^ZnZat6;hW,I`H7H15^^",
-                                        "fields": {
-                                          "TEXT": "cek"
+                                        "type": "procedures_callreturn",
+                                        "id": "U|7!ynVp5Z.nwD_`4=Z,",
+                                        "extraState": {
+                                          "name": "foo",
+                                          "params": [
+                                            "logic"
+                                          ]
+                                        },
+                                        "inputs": {
+                                          "ARG0": {
+                                            "block": {
+                                              "type": "logic_boolean",
+                                              "id": "HXRaHRaPE)[G3WGmOi-T",
+                                              "fields": {
+                                                "BOOL": "TRUE"
+                                              }
+                                            }
+                                          }
                                         }
                                       }
                                     }
                                   },
                                   "next": {
                                     "block": {
-                                      "type": "print",
-                                      "id": "#iq/$E*oB0V`%5O}O+2!",
+                                      "type": "variables_set",
+                                      "id": "5WG|J40M0!L^mM5x_2@N",
+                                      "fields": {
+                                        "VAR": {
+                                          "id": "xjE5n-FetBK*,)qj?pyn"
+                                        }
+                                      },
                                       "inputs": {
-                                        "TEXT": {
+                                        "VALUE": {
                                           "block": {
-                                            "type": "variables_get",
-                                            "id": "4[hYi)09%}I%Pj4}fhdb",
+                                            "type": "text",
+                                            "id": "^ZnZat6;hW,I`H7H15^^",
                                             "fields": {
-                                              "VAR": {
-                                                "id": "xjE5n-FetBK*,)qj?pyn"
-                                              }
+                                              "TEXT": "cek"
                                             }
                                           }
                                         }
                                       },
                                       "next": {
                                         "block": {
-                                          "type": "delay",
-                                          "id": "IXp?_lac7+V*GG!lW{]0",
-                                          "fields": {
-                                            "DURATION_MS": 1000
+                                          "type": "print",
+                                          "id": "#iq/$E*oB0V`%5O}O+2!",
+                                          "inputs": {
+                                            "TEXT": {
+                                              "block": {
+                                                "type": "variables_get",
+                                                "id": "4[hYi)09%}I%Pj4}fhdb",
+                                                "fields": {
+                                                  "VAR": {
+                                                    "id": "xjE5n-FetBK*,)qj?pyn"
+                                                  }
+                                                }
+                                              }
+                                            }
                                           },
                                           "next": {
                                             "block": {
-                                              "type": "variables_set",
-                                              "id": "1@OTYSIBwU0xvg(2?-y;",
+                                              "type": "delay",
+                                              "id": "IXp?_lac7+V*GG!lW{]0",
                                               "fields": {
-                                                "VAR": {
-                                                  "id": "C_:{ED@bJimgLzEmC6(`"
-                                                }
-                                              },
-                                              "inputs": {
-                                                "VALUE": {
-                                                  "block": {
-                                                    "type": "digitalIn",
-                                                    "id": "DJpFh.6H~L9fX2V4SDJd",
-                                                    "fields": {
-                                                      "GPIO": 16
-                                                    }
-                                                  }
-                                                }
+                                                "DURATION_MS": 1000
                                               },
                                               "next": {
                                                 "block": {
                                                   "type": "variables_set",
-                                                  "id": "7v:u)fVh$GAwIhdwtH-i",
+                                                  "id": "1@OTYSIBwU0xvg(2?-y;",
                                                   "fields": {
                                                     "VAR": {
                                                       "id": "C_:{ED@bJimgLzEmC6(`"
@@ -174,10 +201,10 @@
                                                   "inputs": {
                                                     "VALUE": {
                                                       "block": {
-                                                        "type": "math_number",
-                                                        "id": "x.-GBy*1d`n}m-;O;Nre",
+                                                        "type": "digitalIn",
+                                                        "id": "DJpFh.6H~L9fX2V4SDJd",
                                                         "fields": {
-                                                          "NUM": 1
+                                                          "GPIO": 16
                                                         }
                                                       }
                                                     }
@@ -185,124 +212,124 @@
                                                   "next": {
                                                     "block": {
                                                       "type": "variables_set",
-                                                      "id": "toVbALp.{C5C+{9GMK%e",
+                                                      "id": "7v:u)fVh$GAwIhdwtH-i",
                                                       "fields": {
                                                         "VAR": {
-                                                          "id": "xjE5n-FetBK*,)qj?pyn"
+                                                          "id": ",S57`x^[^{+#%(k%Q5~)"
                                                         }
                                                       },
                                                       "inputs": {
                                                         "VALUE": {
                                                           "block": {
-                                                            "type": "text",
-                                                            "id": "oA52{ydq^ZsJF:O@NU,d",
+                                                            "type": "hmiGetSwitch",
+                                                            "id": ";OlVmrI`tP2Wn98MhQ(6",
                                                             "fields": {
-                                                              "TEXT": "cok"
+                                                              "NAME": "Switch1"
                                                             }
                                                           }
                                                         }
                                                       },
                                                       "next": {
                                                         "block": {
-                                                          "type": "print",
-                                                          "id": "iB`R-:UTF#c3EXAU.Qh-",
+                                                          "type": "variables_set",
+                                                          "id": "toVbALp.{C5C+{9GMK%e",
+                                                          "fields": {
+                                                            "VAR": {
+                                                              "id": "xjE5n-FetBK*,)qj?pyn"
+                                                            }
+                                                          },
                                                           "inputs": {
-                                                            "TEXT": {
+                                                            "VALUE": {
                                                               "block": {
-                                                                "type": "variables_get",
-                                                                "id": "+wF~Y65u+aNA.ZX3!^Ra",
+                                                                "type": "text",
+                                                                "id": "oA52{ydq^ZsJF:O@NU,d",
                                                                 "fields": {
-                                                                  "VAR": {
-                                                                    "id": "xjE5n-FetBK*,)qj?pyn"
-                                                                  }
+                                                                  "TEXT": "cok"
                                                                 }
                                                               }
                                                             }
                                                           },
                                                           "next": {
                                                             "block": {
-                                                              "type": "variables_set",
-                                                              "id": "E8`?q[Z3*IpN3,52Y=jA",
-                                                              "fields": {
-                                                                "VAR": {
-                                                                  "id": "[g,f6Mp!O$eZPCFs0U[H"
-                                                                }
-                                                              },
+                                                              "type": "print",
+                                                              "id": "iB`R-:UTF#c3EXAU.Qh-",
                                                               "inputs": {
-                                                                "VALUE": {
+                                                                "TEXT": {
                                                                   "block": {
-                                                                    "type": "math_number",
-                                                                    "id": "iOJP=T-{O5h_^;{Yz?%(",
+                                                                    "type": "variables_get",
+                                                                    "id": "+wF~Y65u+aNA.ZX3!^Ra",
                                                                     "fields": {
-                                                                      "NUM": 3000
+                                                                      "VAR": {
+                                                                        "id": "xjE5n-FetBK*,)qj?pyn"
+                                                                      }
                                                                     }
                                                                   }
                                                                 }
                                                               },
                                                               "next": {
                                                                 "block": {
-                                                                  "type": "delay",
-                                                                  "id": "VQy`Sl3]ey49sP%+N6$R",
+                                                                  "type": "variables_set",
+                                                                  "id": "E8`?q[Z3*IpN3,52Y=jA",
                                                                   "fields": {
-                                                                    "DURATION_MS": 1000
+                                                                    "VAR": {
+                                                                      "id": "[g,f6Mp!O$eZPCFs0U[H"
+                                                                    }
+                                                                  },
+                                                                  "inputs": {
+                                                                    "VALUE": {
+                                                                      "block": {
+                                                                        "type": "math_number",
+                                                                        "id": "iOJP=T-{O5h_^;{Yz?%(",
+                                                                        "fields": {
+                                                                          "NUM": 3000
+                                                                        }
+                                                                      }
+                                                                    }
                                                                   },
                                                                   "next": {
                                                                     "block": {
-                                                                      "type": "variables_set",
-                                                                      "id": "i|LkDgVjImZd2}owndlz",
+                                                                      "type": "delay",
+                                                                      "id": "VQy`Sl3]ey49sP%+N6$R",
                                                                       "fields": {
-                                                                        "VAR": {
-                                                                          "id": "[g,f6Mp!O$eZPCFs0U[H"
-                                                                        }
-                                                                      },
-                                                                      "inputs": {
-                                                                        "VALUE": {
-                                                                          "block": {
-                                                                            "type": "math_number",
-                                                                            "id": "[C@fwlekugl(`pi1b;1(",
-                                                                            "fields": {
-                                                                              "NUM": 100
-                                                                            }
-                                                                          }
-                                                                        }
+                                                                        "DURATION_MS": 1000
                                                                       },
                                                                       "next": {
                                                                         "block": {
-                                                                          "type": "pwmWrite",
-                                                                          "id": "Ezn#r.|lvDj5{Q1-C:E$",
+                                                                          "type": "variables_set",
+                                                                          "id": "i|LkDgVjImZd2}owndlz",
                                                                           "fields": {
-                                                                            "ADDRESS": "64",
-                                                                            "CHANNEL": 0
+                                                                            "VAR": {
+                                                                              "id": "[g,f6Mp!O$eZPCFs0U[H"
+                                                                            }
                                                                           },
                                                                           "inputs": {
-                                                                            "PWM_VALUE": {
+                                                                            "VALUE": {
                                                                               "block": {
-                                                                                "type": "variables_get",
-                                                                                "id": "OkA-}PRPzgi;[I)@vcG$",
+                                                                                "type": "hmiGetSlider",
+                                                                                "id": "3;jHO[lTaxLBbEe*$~?N",
                                                                                 "fields": {
-                                                                                  "VAR": {
-                                                                                    "id": "[g,f6Mp!O$eZPCFs0U[H"
-                                                                                  }
+                                                                                  "NAME": "Slider1"
                                                                                 }
                                                                               }
                                                                             }
                                                                           },
                                                                           "next": {
                                                                             "block": {
-                                                                              "type": "variables_set",
-                                                                              "id": "m{+MhlXz-1tpl`mPPBh5",
+                                                                              "type": "pwmWrite",
+                                                                              "id": "Ezn#r.|lvDj5{Q1-C:E$",
                                                                               "fields": {
-                                                                                "VAR": {
-                                                                                  "id": "ju{xs[rjZumqS87$0nhu"
-                                                                                }
+                                                                                "ADDRESS": "64",
+                                                                                "CHANNEL": 0
                                                                               },
                                                                               "inputs": {
-                                                                                "VALUE": {
+                                                                                "PWM_VALUE": {
                                                                                   "block": {
-                                                                                    "type": "odometryRead",
-                                                                                    "id": "v=Js89HC8D0UUA.-pN[q",
+                                                                                    "type": "variables_get",
+                                                                                    "id": "OkA-}PRPzgi;[I)@vcG$",
                                                                                     "fields": {
-                                                                                      "SOURCE": "encoder"
+                                                                                      "VAR": {
+                                                                                        "id": "[g,f6Mp!O$eZPCFs0U[H"
+                                                                                      }
                                                                                     }
                                                                                   }
                                                                                 }
@@ -310,28 +337,50 @@
                                                                               "next": {
                                                                                 "block": {
                                                                                   "type": "variables_set",
-                                                                                  "id": "]LcUOwlc-y=`.e?EVgTa",
+                                                                                  "id": "m{+MhlXz-1tpl`mPPBh5",
                                                                                   "fields": {
                                                                                     "VAR": {
-                                                                                      "id": "Ug!mIa*[PnsL?H#9Ar*G"
+                                                                                      "id": "ju{xs[rjZumqS87$0nhu"
                                                                                     }
                                                                                   },
                                                                                   "inputs": {
                                                                                     "VALUE": {
                                                                                       "block": {
-                                                                                        "type": "odometryGet",
-                                                                                        "id": "VG2Q/8?zcyU}s4!W;V/M",
+                                                                                        "type": "odometryRead",
+                                                                                        "id": "v=Js89HC8D0UUA.-pN[q",
                                                                                         "fields": {
-                                                                                          "FIELD": "x"
-                                                                                        },
-                                                                                        "inputs": {
-                                                                                          "VAR": {
-                                                                                            "block": {
-                                                                                              "type": "variables_get",
-                                                                                              "id": "^AW6|z21?ycRyzJ2y5u9",
-                                                                                              "fields": {
-                                                                                                "VAR": {
-                                                                                                  "id": "ju{xs[rjZumqS87$0nhu"
+                                                                                          "SOURCE": "encoder"
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  },
+                                                                                  "next": {
+                                                                                    "block": {
+                                                                                      "type": "variables_set",
+                                                                                      "id": "]LcUOwlc-y=`.e?EVgTa",
+                                                                                      "fields": {
+                                                                                        "VAR": {
+                                                                                          "id": "Ug!mIa*[PnsL?H#9Ar*G"
+                                                                                        }
+                                                                                      },
+                                                                                      "inputs": {
+                                                                                        "VALUE": {
+                                                                                          "block": {
+                                                                                            "type": "odometryGet",
+                                                                                            "id": "VG2Q/8?zcyU}s4!W;V/M",
+                                                                                            "fields": {
+                                                                                              "FIELD": "x"
+                                                                                            },
+                                                                                            "inputs": {
+                                                                                              "VAR": {
+                                                                                                "block": {
+                                                                                                  "type": "variables_get",
+                                                                                                  "id": "^AW6|z21?ycRyzJ2y5u9",
+                                                                                                  "fields": {
+                                                                                                    "VAR": {
+                                                                                                      "id": "ju{xs[rjZumqS87$0nhu"
+                                                                                                    }
+                                                                                                  }
                                                                                                 }
                                                                                               }
                                                                                             }
@@ -380,7 +429,7 @@
         {
           "type": "procedures_defreturn",
           "id": "4W(2:w1NGV^I;j6@^_I|",
-          "x": 330,
+          "x": 530,
           "y": -30,
           "extraState": {
             "params": [
@@ -452,62 +501,28 @@
           "inputs": {
             "BODY": {
               "block": {
-                "type": "hmiSetLed",
-                "id": "]1*kO+b!c-UMEf9QD)Tj",
+                "type": "hmiSetButton",
+                "id": "0mslI4E`fhAji;c29:)%",
                 "fields": {
-                  "NAME": "LED1",
-                  "COLOR": "#4caf50"
-                },
-                "inputs": {
-                  "STATE": {
-                    "block": {
-                      "type": "logic_compare",
-                      "id": "}?u/kp[mk2!n~i8gaCPu",
-                      "fields": {
-                        "OP": "NEQ"
-                      },
-                      "inputs": {
-                        "A": {
-                          "block": {
-                            "type": "variables_get",
-                            "id": "c;5GoC0CMnq-ck;%rMDE",
-                            "fields": {
-                              "VAR": {
-                                "id": "C_:{ED@bJimgLzEmC6(`"
-                              }
-                            }
-                          }
-                        },
-                        "B": {
-                          "block": {
-                            "type": "math_number",
-                            "id": "#x9E1:31XXQM9stsU!TZ",
-                            "fields": {
-                              "NUM": 0
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
+                  "NAME": "Btn1",
+                  "LABEL": "Press",
+                  "COLOR": "#2196f3"
                 },
                 "next": {
                   "block": {
-                    "type": "hmiSetGauge",
-                    "id": "FeWSZv_C@ci}5(#:EV.A",
+                    "type": "hmiSetSwitch",
+                    "id": "Z9(pm)t5OJE/wOSg+Xm/",
                     "fields": {
-                      "NAME": "Gauge1",
-                      "MIN": 0,
-                      "MAX": 4069
+                      "NAME": "Switch1"
                     },
                     "inputs": {
-                      "VALUE": {
+                      "STATE": {
                         "block": {
                           "type": "variables_get",
-                          "id": "LIIgG+UMkthq!S.K}dX8",
+                          "id": "1K:Kr/,*|b`yzsoI%M,n",
                           "fields": {
                             "VAR": {
-                              "id": "[g,f6Mp!O$eZPCFs0U[H"
+                              "id": ",S57`x^[^{+#%(k%Q5~)"
                             }
                           }
                         }
@@ -515,19 +530,40 @@
                     },
                     "next": {
                       "block": {
-                        "type": "hmiSetText",
-                        "id": "1d7kB$!lQpY@szAnVaLx",
+                        "type": "hmiSetLed",
+                        "id": "]1*kO+b!c-UMEf9QD)Tj",
                         "fields": {
-                          "NAME": "Status"
+                          "NAME": "pinInLed",
+                          "COLOR": "#4caf50"
                         },
                         "inputs": {
-                          "TEXT": {
+                          "STATE": {
                             "block": {
-                              "type": "variables_get",
-                              "id": "`usj,%r!VHQt}Ucr]Bxv",
+                              "type": "logic_compare",
+                              "id": "}?u/kp[mk2!n~i8gaCPu",
                               "fields": {
-                                "VAR": {
-                                  "id": "xjE5n-FetBK*,)qj?pyn"
+                                "OP": "NEQ"
+                              },
+                              "inputs": {
+                                "A": {
+                                  "block": {
+                                    "type": "variables_get",
+                                    "id": "c;5GoC0CMnq-ck;%rMDE",
+                                    "fields": {
+                                      "VAR": {
+                                        "id": "C_:{ED@bJimgLzEmC6(`"
+                                      }
+                                    }
+                                  }
+                                },
+                                "B": {
+                                  "block": {
+                                    "type": "math_number",
+                                    "id": "#x9E1:31XXQM9stsU!TZ",
+                                    "fields": {
+                                      "NUM": 0
+                                    }
+                                  }
                                 }
                               }
                             }
@@ -535,20 +571,113 @@
                         },
                         "next": {
                           "block": {
-                            "type": "hmiSetNumber",
-                            "id": "-^@C9g@boq7MU?u2E}f9",
+                            "type": "hmiSetLed",
+                            "id": "7cx}vtbz1RDUUmaiM7EW",
                             "fields": {
-                              "NAME": "Value1",
-                              "UNIT": "pin"
+                              "NAME": "SWITCH",
+                              "COLOR": "#2196f3"
                             },
                             "inputs": {
-                              "VALUE": {
+                              "STATE": {
                                 "block": {
                                   "type": "variables_get",
-                                  "id": "Cpu4;(,q`6WS@(f@L,|6",
+                                  "id": "[rrmqtM21gFF)[f_~Nly",
                                   "fields": {
                                     "VAR": {
-                                      "id": "[g,f6Mp!O$eZPCFs0U[H"
+                                      "id": ",S57`x^[^{+#%(k%Q5~)"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "next": {
+                              "block": {
+                                "type": "hmiSetSlider",
+                                "id": "fT?r]`hGbs8uNq.x6Q~f",
+                                "fields": {
+                                  "NAME": "Slider1",
+                                  "MIN": 0,
+                                  "MAX": 100
+                                },
+                                "inputs": {
+                                  "VALUE": {
+                                    "block": {
+                                      "type": "variables_get",
+                                      "id": "lPoTKTh-11[Vvl*Pr.xB",
+                                      "fields": {
+                                        "VAR": {
+                                          "id": "[g,f6Mp!O$eZPCFs0U[H"
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "next": {
+                                  "block": {
+                                    "type": "hmiSetGauge",
+                                    "id": "FeWSZv_C@ci}5(#:EV.A",
+                                    "fields": {
+                                      "NAME": "Gauge1",
+                                      "MIN": 0,
+                                      "MAX": 4069
+                                    },
+                                    "inputs": {
+                                      "VALUE": {
+                                        "block": {
+                                          "type": "variables_get",
+                                          "id": "LIIgG+UMkthq!S.K}dX8",
+                                          "fields": {
+                                            "VAR": {
+                                              "id": "[g,f6Mp!O$eZPCFs0U[H"
+                                            }
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "next": {
+                                      "block": {
+                                        "type": "hmiSetText",
+                                        "id": "1d7kB$!lQpY@szAnVaLx",
+                                        "fields": {
+                                          "NAME": "Status"
+                                        },
+                                        "inputs": {
+                                          "TEXT": {
+                                            "block": {
+                                              "type": "variables_get",
+                                              "id": "`usj,%r!VHQt}Ucr]Bxv",
+                                              "fields": {
+                                                "VAR": {
+                                                  "id": "xjE5n-FetBK*,)qj?pyn"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        "next": {
+                                          "block": {
+                                            "type": "hmiSetNumber",
+                                            "id": "-^@C9g@boq7MU?u2E}f9",
+                                            "fields": {
+                                              "NAME": "Value1",
+                                              "UNIT": "pin"
+                                            },
+                                            "inputs": {
+                                              "VALUE": {
+                                                "block": {
+                                                  "type": "variables_get",
+                                                  "id": "Cpu4;(,q`6WS@(f@L,|6",
+                                                  "fields": {
+                                                    "VAR": {
+                                                      "id": "[g,f6Mp!O$eZPCFs0U[H"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
                                     }
                                   }
                                 }
@@ -590,14 +719,39 @@
       {
         "name": "text",
         "id": "xjE5n-FetBK*,)qj?pyn"
+      },
+      {
+        "name": "switchLed",
+        "id": ",S57`x^[^{+#%(k%Q5~)"
       }
     ]
   },
   "hmiLayout": [
     {
-      "name": "LED1",
+      "name": "Btn1",
+      "type": "button",
+      "x": 0,
+      "y": 6,
+      "w": 2,
+      "h": 1,
+      "config": {
+        "label": "Press",
+        "color": "#2196f3"
+      }
+    },
+    {
+      "name": "Switch1",
+      "type": "switch",
+      "x": 2,
+      "y": 6,
+      "w": 2,
+      "h": 1,
+      "config": {}
+    },
+    {
+      "name": "pinInLed",
       "type": "led",
-      "x": 1,
+      "x": 0,
       "y": 1,
       "w": 2,
       "h": 1,
@@ -606,11 +760,34 @@
       }
     },
     {
+      "name": "SWITCH",
+      "type": "led",
+      "x": 2,
+      "y": 1,
+      "w": 2,
+      "h": 1,
+      "config": {
+        "color": "#2196f3"
+      }
+    },
+    {
+      "name": "Slider1",
+      "type": "slider",
+      "x": 0,
+      "y": 2,
+      "w": 6,
+      "h": 1,
+      "config": {
+        "min": 0,
+        "max": 100
+      }
+    },
+    {
       "name": "Gauge1",
       "type": "gauge",
-      "x": 1,
-      "y": 2,
-      "w": 2,
+      "x": 0,
+      "y": 3,
+      "w": 6,
       "h": 2,
       "config": {
         "min": 0,
@@ -629,7 +806,7 @@
     {
       "name": "Value1",
       "type": "number",
-      "x": 3,
+      "x": 4,
       "y": 1,
       "w": 2,
       "h": 1,
