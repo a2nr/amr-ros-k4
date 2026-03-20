@@ -7,45 +7,81 @@
 
 Dokumentasi lengkap dapat dilihat di [DOCUMENTATION.md](DOCUMENTATION.md).
 
-# Aturan pengggunaan dokumen
+**Aturan pengggunaan dokumen**
 
 bab pada dokumen merepresentasikan alur rencana pengembangan. 
-## Potential Enhancements
 
-bab ini digunakan untuk Feasibility Study
-
-## Planned Feature
-
-Backlog. Setelah kita pelajari untuk di kerjakan maka kita pindah ke backlog
-
-## Feature Task
-
-penjabaran Pekerjaan yang ready untuk dikerjakan. Task harus dijelaskan apa yang akan dikerjakan dan terdapat definition of done nya
-Berikut ini adalah template untuk pembuatan task :
-
-```
-
-## <nomor task> <judul task> : <state: [ ] >
-jelaskan permasalah di bab ini
-### Bug 1 [ ] : Keterangan bug untuk rekap permasalahan
-**Symtomp**    : jelaskan masalahnya!
-**Root Couse** : masalah ini dikarenakan apa?
-**Fix**        : bagaimana cara fix nya?
-### Definition Of Done
-[ ] DoD 1
-[ ] DoD 2
-[ ] Bug 1 ... 
-
-```
+> **Potential Enhancements**
+> 
+> bab ini digunakan untuk Feasibility Study
+> 
+> **Planned Feature**
+> 
+> Backlog. Setelah kita pelajari untuk di kerjakan maka kita pindah ke backlog
+> 
+> **Feature Task**
+> 
+> penjabaran Pekerjaan yang ready untuk dikerjakan. Task harus dijelaskan apa yang akan dikerjakan dan terdapat definition of done nya
+> Berikut ini adalah template untuk pembuatan task :
+> 
+> ```
+> ## <nomor task> <judul task> : <state: [ ] >
+> jelaskan permasalah di bab ini
+> ### Bug 1 [ ] : Keterangan bug untuk rekap permasalahan
+> **Symtomp**    : jelaskan masalahnya!
+> **Root Couse** : masalah ini dikarenakan apa?
+> **Fix**        : bagaimana cara fix nya?
+> ### Definition Of Done
+> [ ] DoD 1
+> [ ] DoD 2
+> [ ] Bug 1 ... 
+> 
+> ```
 
 ---
 
 # Potential Enhancements
-this list is short by priority
-- **Feasibility Study to implement Controller**: mobile robot need controller to move flawlesly.
-- **Launch files**: ROS2 launch files to start all nodes with one command includ node in raspberry pi. composite blockly dan executor yang memiliki composit 2 jenis yaitu menggunakan executor dummy dan executor-hw.
-- **Simulation**: Integrate with Gazebo/Isaac Sim for testing Kiwi Wheel kinematics before deploying to hardware
-- **Block categories**: Future blocks grouped into Robot, Sensors, Navigation categories
+
+this sub title list is short by priority
+
+## **Launch files** 
+ROS2 launch files to start all nodes with one command includ node in raspberry pi. composite blockly dan executor yang memiliki composit 2 jenis yaitu menggunakan executor dummy dan executor-hw.
+
+## **overwhelm BLOCKS.md**
+
+please analyse and split BLOCKS.md into some file. sarankan padaku apa saja yang perlu di pindah sebelum melakukannya. this my purpose path
+```
+src/blockly_app
+├── docs             
+|   ├── BLOCKS.md       # table of sub content blocks
+│   └── <sub bab>.md    # content
+```
+## **Feasibility Study to implement Vision Sensor**
+
+coba kamu lakukan penelitian literatur untuk penerapan vision sensor dengan kemampuan berikut ini 
+1. Melakukan pengenalan warna dan obyek beserta prosedur untuk training warna
+2. Melakukan penghitungan obyek yang tersusun secara urut dari kiri ke kanan.
+
+berikan proposal mu untuk mencakup penerapannya juga di blockly app.
+
+berikut ini adalah path yang aku sarankan untuk menampung hasil penelitianmu
+```
+src/amr_vision_node
+├── docs/
+│   └── feasibility.md     
+```
+## **Feasibility Study to implement Controller**
+
+do some research about to make my mobile robot move flawlesly. the scope is controller, kenematics, identification system. kamu bisa rekap hasil feasibility study mu di path berikut ini dan folder amt_controller_node sekaligus sebagai workspace node kusus controller robot tapi tetap rekap task di amr-ros-k4/readme.md
+```
+src/amr_controller_node
+├── docs/            
+│   └── feasibility.md     
+```
+
+## **Simulation**
+
+ Integrate with Gazebo/Isaac Sim for testing Kiwi Wheel kinematics before deploying to hardware
 
 # Feature Task
 
