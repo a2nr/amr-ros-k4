@@ -79,11 +79,18 @@ Pi tidak perlu publish terus-menerus. Snapshot dipublish hanya saat dibutuhkan (
 ```
 User clicks "Run" di Blockly
     ↓
-HMI program loop (~20 Hz):
-  1. executeAction('vision_snapshot', {}) → handler ambil frame cache → return base64
-  2. HMI.setCamera('cam1', base64image)  → tampilkan di HMI widget
-  3. executeAction('vision_detect', {color:'red', slots:4, roi:{...}}) → OpenCV → results
-  4. HMI.setSlotStatus('slots1', results) → update slot indicator di HMI
+  Main Program:
+    1. executeAction('vision_snapshot', {})
+       → handler: ambil frame dari /vision/snapshot cache + simpan di _vision_frame_cache
+       → return base64 untuk HMI display → tampung di variable
+    2. executeAction('vision_scan', { roi: JSON.stringify(HMI.getVisionROI()) })
+       → handler: pakai _vision_frame_cache (server-side, no image round-trip)
+       → OpenCV: crop ROI → HSV threshold → contour → slot assignment
+       → return JSON results
+
+  HMI program loop (~20 Hz):
+    1. HMI.showCapture(base64Snapshot) → ambil dari variable → tampilkan di HMI camera widget
+    2. User bisa edit ROI secara visual di HMI → HMI.getVisionROI() tersedia untuk Main Program
 ```
 
 ---
@@ -502,22 +509,31 @@ Pada 2 Hz dengan 640x480, bandwidth ~100 KB/s — sangat terjangkau untuk WiFi a
 handlers/vision.py
 │
 ├── _get_snapshot_subscriber()    ← Lazy-subscribe ke /vision/snapshot
-│   └── Cache latest JPEG bytes (thread-safe)
+│   └── Cache latest JPEG bytes dari Pi (thread-safe)
 │
-├── @handler("vision_snapshot")   ← Return base64 image untuk HMI display
-│   └── Decode cached JPEG → annotate (optional) → base64 → JSON
+├── @handler("vision_snapshot")   ← Snapshot + cache untuk vision_scan
+│   └── Ambil dari /vision/snapshot cache → simpan ke _vision_frame_cache
+│       → encode base64 → return JSON {image: "data:image/jpeg;base64,..."}
 │
-├── @handler("vision_detect")     ← Full detection pipeline
-│   └── Decode → crop ROI → HSV threshold → contour → slot assignment → JSON
+├── @handler("vision_scan")      ← Full detection pipeline (server-side cache)
+│   └── Pakai _vision_frame_cache → crop ROI → HSV threshold → contour → slot → JSON
 │
-└── @handler("vision_train_color") ← Train color from ROI
-    └── Decode → crop ROI → sample HSV → compute range → save profile
+└── @handler("vision_train_color") ← Train color dari ROI
+    └── Pakai _vision_frame_cache → crop ROI → sample HSV → compute range → save profile
 ```
 
 ### 9.3 Contoh Implementasi
 
 ```python
-"""Vision handlers — all OpenCV processing happens here (executor side)."""
+"""Vision handlers — all OpenCV processing happens here (executor side).
+
+Server-side cache pattern:
+  1. vision_snapshot: ambil frame dari Pi (/vision/snapshot) → simpan ke _vision_frame_cache
+     → return base64 untuk HMI display
+  2. vision_scan: pakai _vision_frame_cache langsung (no image round-trip via JS)
+     → crop ROI → HSV threshold → contour → slot assignment → return JSON
+  3. vision_train_color: pakai _vision_frame_cache → sample ROI → save color profile
+"""
 
 import base64
 import json
@@ -551,7 +567,8 @@ def _save_color_profiles(profiles):
 def _get_snapshot_subscriber(hardware: Hardware):
     """Lazy-create subscriber for /vision/snapshot from Pi."""
     if not hasattr(hardware.node, "_vision_snapshot_cache"):
-        hardware.node._vision_snapshot_cache = None  # raw JPEG bytes
+        hardware.node._vision_snapshot_cache = None  # raw JPEG bytes dari Pi
+        hardware.node._vision_frame_cache = None     # frame untuk vision_scan/train
         hardware.node._vision_snapshot_lock = threading.Lock()
         hardware.node._vision_snapshot_sub = None
 
@@ -569,11 +586,18 @@ def _get_snapshot_subscriber(hardware: Hardware):
     return hardware.node
 
 
-def _get_cached_frame(hardware: Hardware):
-    """Get the latest cached JPEG bytes from Pi."""
+def _get_cached_jpeg(hardware: Hardware):
+    """Get the latest cached JPEG bytes from Pi topic."""
     node = _get_snapshot_subscriber(hardware)
     with node._vision_snapshot_lock:
         return node._vision_snapshot_cache
+
+
+def _get_frame_cache(hardware: Hardware):
+    """Get the frame saved by vision_snapshot for use by vision_scan/train."""
+    node = _get_snapshot_subscriber(hardware)
+    with node._vision_snapshot_lock:
+        return node._vision_frame_cache
 
 
 def _decode_frame(jpeg_bytes):
@@ -585,13 +609,23 @@ def _decode_frame(jpeg_bytes):
 def handle_vision_snapshot(
     params: dict[str, str], hardware: Hardware
 ) -> tuple[bool, str]:
-    """Return latest camera frame as base64 for HMI display."""
+    """Capture snapshot: cache frame server-side + return base64 for HMI.
+
+    This handler does TWO things:
+    1. Saves the raw JPEG to _vision_frame_cache (for vision_scan/train to use)
+    2. Returns base64 image (for HMI display via JS variable)
+    """
     hardware.log("vision_snapshot()")
 
     if hardware.is_real():
-        jpeg_bytes = _get_cached_frame(hardware)
+        jpeg_bytes = _get_cached_jpeg(hardware)
         if jpeg_bytes is None:
             return (True, json.dumps({"image": None, "error": "no frame"}))
+
+        # Save frame server-side for vision_scan/train (no round-trip needed)
+        node = _get_snapshot_subscriber(hardware)
+        with node._vision_snapshot_lock:
+            node._vision_frame_cache = jpeg_bytes
 
         b64 = base64.b64encode(jpeg_bytes).decode("ascii")
         return (True, json.dumps({
@@ -602,21 +636,25 @@ def handle_vision_snapshot(
     return (True, json.dumps({"image": None, "dummy": True}))
 
 
-@handler("vision_detect")
-def handle_vision_detect(
+@handler("vision_scan")
+def handle_vision_scan(
     params: dict[str, str], hardware: Hardware
 ) -> tuple[bool, str]:
-    """Detect objects in slots using HSV thresholding."""
+    """Detect objects in slots using server-side cached frame.
+
+    Uses _vision_frame_cache (set by vision_snapshot) — no image param needed.
+    ROI comes from HMI widget state via JS: HMI.getVisionROI().
+    """
     color = params.get("color", "all")
     num_slots = int(params.get("slots", "1"))
     roi_json = params.get("roi", "{}")
-    hardware.log(f"vision_detect(color={color}, slots={num_slots})")
+    hardware.log(f"vision_scan(color={color}, slots={num_slots})")
 
     data = {"total_slots": num_slots, "present_count": 0,
             "absent_count": num_slots, "slots": []}
 
     if hardware.is_real():
-        jpeg_bytes = _get_cached_frame(hardware)
+        jpeg_bytes = _get_frame_cache(hardware)
         if jpeg_bytes is None:
             return (True, json.dumps(data))
 
@@ -680,16 +718,20 @@ def handle_vision_detect(
 def handle_vision_train_color(
     params: dict[str, str], hardware: Hardware
 ) -> tuple[bool, str]:
-    """Train a color by sampling ROI from the current frame."""
+    """Train a color by sampling ROI from the server-side cached frame.
+
+    Uses _vision_frame_cache (set by vision_snapshot) — no image param needed.
+    ROI comes from HMI widget state via JS: HMI.getVisionROI().
+    """
     name = params.get("name", "unknown")
     roi_json = params.get("roi", "{}")
     tolerance = int(params.get("tolerance", "15"))
     hardware.log(f"vision_train_color(name={name}, tolerance={tolerance})")
 
     if hardware.is_real():
-        jpeg_bytes = _get_cached_frame(hardware)
+        jpeg_bytes = _get_frame_cache(hardware)
         if jpeg_bytes is None:
-            return (True, "No camera frame available")
+            return (True, "No frame — call vision_snapshot first")
 
         frame = _decode_frame(jpeg_bytes)
         h, w = frame.shape[:2]
@@ -825,10 +867,10 @@ function getCameraROI(name) {
 
 | Block | Tipe | Category | Deskripsi |
 |-------|------|----------|-----------|
-| `visionSnapshot` | ROS2 value (HMI) | Vision | Ambil snapshot + tampilkan di HMI camera widget |
-| `visionDetect` | ROS2 value | Vision | Deteksi obyek dalam slots → return JSON |
+| `visionSnapshot` | ROS2 value | Vision | Ambil snapshot + cache server-side + return base64 untuk HMI |
+| `visionScan` | ROS2 value | Vision | Scan cached frame dalam slots → return JSON (ROI dari HMI) |
 | `visionGetSlot` | Client-side | Vision | Extract status slot ke-N (present/absent/color) |
-| `visionTrainColor` | ROS2 statement | Vision | Training warna dari ROI saat ini |
+| `visionTrainColor` | ROS2 statement | Vision | Training warna dari cached frame + ROI dari HMI |
 | `hmiSetCamera` | Client-side (HMI) | HMI | Update HMI camera widget dengan frame + detections |
 
 ### 11.2 Block: `visionSnapshot`
@@ -867,29 +909,30 @@ BlockRegistry.register({
 });
 ```
 
-### 11.3 Block: `visionDetect`
+### 11.3 Block: `visionScan`
 
-Deteksi obyek dalam frame dengan slot-based counting.
+Scan cached frame (dari `vision_snapshot`) dengan slot-based counting. ROI diambil dari HMI widget state — tidak perlu input manual di block.
 
 ```
 ┌───────────────────────────────────────────────┐
-│ detectVision  color: [All ▾]  slots: [■ 4]   │
-│   ROI: x [■] y [■] w [■] h [■]               │ → output: Object (JSON)
+│ scanVision  color: [All ▾]  slots: [■ 4]     │ → output: Object (JSON)
 └───────────────────────────────────────────────┘
 ```
 
+ROI otomatis diambil dari `HMI.getVisionROI()` — user mengatur ROI secara visual di HMI camera widget.
+
 ```javascript
 BlockRegistry.register({
-  name: 'visionDetect',
+  name: 'visionScan',
   category: 'Vision',
   categoryColor: '#8E24AA',
   color: '#8E24AA',
-  tooltip: 'Detect objects in slots — supports gap detection (empty slots)',
+  tooltip: 'Scan cached frame for objects in slots — ROI from HMI camera widget',
 
   definition: {
     init: function () {
       this.appendValueInput('SLOTS')
-        .appendField('detectVision')
+        .appendField('scanVision')
         .appendField(new Blockly.FieldDropdown([
           ['All colors', 'all'],
           ['Red', 'red'],
@@ -897,14 +940,10 @@ BlockRegistry.register({
           ['Green', 'green']
         ]), 'COLOR')
         .appendField('slots:');
-      this.appendValueInput('ROI_X').appendField('ROI x:').setCheck('Number');
-      this.appendValueInput('ROI_Y').appendField('y:').setCheck('Number');
-      this.appendValueInput('ROI_W').appendField('w:').setCheck('Number');
-      this.appendValueInput('ROI_H').appendField('h:').setCheck('Number');
       this.setInputsInline(true);
       this.setOutput(true, null);
       this.setColour('#8E24AA');
-      this.setTooltip('Detect objects in N slots — returns {total_slots, present_count, absent_count, slots[]}');
+      this.setTooltip('Scan cached frame — ROI from HMI, returns {total_slots, present_count, absent_count, slots[]}');
     }
   },
 
@@ -912,19 +951,11 @@ BlockRegistry.register({
     var color = block.getFieldValue('COLOR');
     var slots = Blockly.JavaScript.valueToCode(
       block, 'SLOTS', Blockly.JavaScript.ORDER_ATOMIC) || '1';
-    var roiX = Blockly.JavaScript.valueToCode(
-      block, 'ROI_X', Blockly.JavaScript.ORDER_ATOMIC) || '0';
-    var roiY = Blockly.JavaScript.valueToCode(
-      block, 'ROI_Y', Blockly.JavaScript.ORDER_ATOMIC) || '0';
-    var roiW = Blockly.JavaScript.valueToCode(
-      block, 'ROI_W', Blockly.JavaScript.ORDER_ATOMIC) || '640';
-    var roiH = Blockly.JavaScript.valueToCode(
-      block, 'ROI_H', Blockly.JavaScript.ORDER_ATOMIC) || '480';
 
-    var code = 'JSON.parse((await executeAction(\'vision_detect\', ' +
+    // ROI diambil dari HMI widget state (server-side cache, no image round-trip)
+    var code = 'JSON.parse((await executeAction(\'vision_scan\', ' +
       '{ color: \'' + color + '\', slots: String(' + slots + '), ' +
-      'roi: JSON.stringify({x: ' + roiX + ', y: ' + roiY +
-      ', w: ' + roiW + ', h: ' + roiH + '}) })).message)';
+      'roi: JSON.stringify(HMI.getVisionROI()) })).message)';
     return [code, Blockly.JavaScript.ORDER_AWAIT];
   }
 });
@@ -991,15 +1022,15 @@ BlockRegistry.register({
 
 ### 11.5 Block: `visionTrainColor`
 
-Training warna dari ROI area pada frame kamera saat ini.
+Training warna dari cached frame + ROI dari HMI. User cukup letakkan obyek di area ROI (yang terlihat di HMI camera widget), lalu jalankan block ini.
 
 ```
 ┌──────────────────────────────────────────────┐
-│ trainColor  name: [input]                    │
-│   ROI: x [■] y [■] w [■] h [■]              │
-│   tolerance: [15]                            │
+│ trainColor  name: [input]  tolerance: [15]   │
 └──────────────────────────────────────────────┘
 ```
+
+ROI otomatis dari `HMI.getVisionROI()` — sama dengan `visionScan`.
 
 ```javascript
 BlockRegistry.register({
@@ -1007,44 +1038,31 @@ BlockRegistry.register({
   category: 'Vision',
   categoryColor: '#8E24AA',
   color: '#8E24AA',
-  tooltip: 'Train a new color from ROI area — place colored object in view first',
+  tooltip: 'Train a color from cached frame — ROI from HMI camera widget',
 
   definition: {
     init: function () {
       this.appendDummyInput()
         .appendField('trainColor')
         .appendField('name:')
-        .appendField(new Blockly.FieldTextInput('red'), 'NAME');
-      this.appendValueInput('ROI_X').appendField('ROI x:').setCheck('Number');
-      this.appendValueInput('ROI_Y').appendField('y:').setCheck('Number');
-      this.appendValueInput('ROI_W').appendField('w:').setCheck('Number');
-      this.appendValueInput('ROI_H').appendField('h:').setCheck('Number');
-      this.appendDummyInput()
+        .appendField(new Blockly.FieldTextInput('red'), 'NAME')
         .appendField('tolerance:')
         .appendField(new Blockly.FieldNumber(15, 5, 50), 'TOLERANCE');
       this.setPreviousStatement(true, null);
       this.setNextStatement(true, null);
       this.setColour('#8E24AA');
-      this.setTooltip('Train a color by sampling the ROI area');
+      this.setTooltip('Train color by sampling ROI from cached frame — call getSnapshot first');
     }
   },
 
   generator: function (block) {
     var name = block.getFieldValue('NAME');
     var tolerance = block.getFieldValue('TOLERANCE');
-    var roiX = Blockly.JavaScript.valueToCode(
-      block, 'ROI_X', Blockly.JavaScript.ORDER_ATOMIC) || '0';
-    var roiY = Blockly.JavaScript.valueToCode(
-      block, 'ROI_Y', Blockly.JavaScript.ORDER_ATOMIC) || '0';
-    var roiW = Blockly.JavaScript.valueToCode(
-      block, 'ROI_W', Blockly.JavaScript.ORDER_ATOMIC) || '640';
-    var roiH = Blockly.JavaScript.valueToCode(
-      block, 'ROI_H', Blockly.JavaScript.ORDER_ATOMIC) || '480';
 
+    // ROI dari HMI widget state, frame dari server-side cache
     var code = 'await executeAction(\'vision_train_color\', ' +
       '{ name: \'' + name + '\', tolerance: \'' + tolerance + '\', ' +
-      'roi: JSON.stringify({x: ' + roiX + ', y: ' + roiY +
-      ', w: ' + roiW + ', h: ' + roiH + '}) });\n';
+      'roi: JSON.stringify(HMI.getVisionROI()) });\n';
     return code;
   }
 });
@@ -1101,12 +1119,16 @@ BlockRegistry.register({
 
 ### 11.7 Contoh Program Blockly Lengkap
 
-**Main Program** — Deteksi dan cek slot:
+**Main Program** — Snapshot + deteksi + cek slot:
 ```
 ┌─ Main Program ──────────────────────────────────────┐
 │                                                      │
-│  set [det] to [detectVision All slots: 4             │
-│                 ROI x:50 y:50 w:540 h:380]           │
+│  set [snap] to [getSnapshot]            ← cache frame│
+│  set [det] to [scanVision All slots: 4] ← pakai     │
+│                                           cached     │
+│                                           frame +    │
+│                                           ROI dari   │
+│                                           HMI        │
 │                                                      │
 │  set [present] to [getSlot [0] Present Count [det]]  │
 │  set [absent]  to [getSlot [0] Absent Count [det]]   │
@@ -1126,9 +1148,8 @@ BlockRegistry.register({
 ```
 ┌─ HMI Program ───────────────────────────────────────┐
 │                                                      │
-│  set [snap] to [getSnapshot]                         │
-│  set [det] to [detectVision All slots: 4             │
-│                 ROI x:50 y:50 w:540 h:380]           │
+│  set [snap] to [getSnapshot]            ← refresh    │
+│  set [det] to [scanVision All slots: 4] ← detect     │
 │  HMI Camera [cam1] frame: [snap] detections: [det]   │
 │                                                      │
 │  HMI Number [present_count] = [getSlot [] Present    │
@@ -1137,22 +1158,26 @@ BlockRegistry.register({
 └──────────────────────────────────────────────────────┘
 ```
 
-**Training Program** — Train warna baru:
+**Catatan**: HMI loop (~20 Hz) memanggil `getSnapshot` setiap iterasi — ini memperbarui `_vision_frame_cache` server-side dan mendapatkan base64 baru untuk display. ROI di-adjust visual di HMI camera widget.
+
+**Training Program** — Train warna baru (ROI dari HMI):
 ```
 ┌─ Main Program ──────────────────────────────────────┐
 │                                                      │
-│  print ["Taruh obyek MERAH di area ROI"]             │
-│  delay [3] seconds                                   │
-│  trainColor name: "merah"                            │
-│    ROI x: 200 y: 150 w: 240 h: 180                  │
-│    tolerance: 15                                     │
+│  print ["Atur ROI di HMI ke area obyek MERAH"]      │
+│  set [snap] to [getSnapshot]            ← cache frame│
+│  HMI Camera [cam1] frame: [snap]        ← user lihat│
+│  delay [5] seconds                      ← waktu atur│
+│                                           ROI di HMI │
+│  set [snap] to [getSnapshot]            ← re-capture │
+│  trainColor name: "merah" tolerance: 15 ← ROI dari  │
+│                                           HMI        │
 │  print ["Training merah selesai!"]                   │
 │                                                      │
-│  print ["Taruh obyek BIRU di area ROI"]              │
-│  delay [3] seconds                                   │
-│  trainColor name: "biru"                             │
-│    ROI x: 200 y: 150 w: 240 h: 180                  │
-│    tolerance: 15                                     │
+│  print ["Ganti obyek ke BIRU, atur ROI"]            │
+│  delay [5] seconds                                   │
+│  set [snap] to [getSnapshot]                         │
+│  trainColor name: "biru" tolerance: 15               │
 │  print ["Training biru selesai!"]                    │
 │                                                      │
 └──────────────────────────────────────────────────────┘
@@ -1167,11 +1192,12 @@ BlockRegistry.register({
 | Komponen | Detail |
 |----------|--------|
 | Pi Node | `amr_vision_node` — capture + publish JPEG only, ament_python |
-| Executor | `handlers/vision.py` — OpenCV processing, 3 handlers |
-| HMI | `setCamera()` widget — display base64 image + slot indicators |
-| Blockly | 5 blocks: `visionSnapshot`, `visionDetect`, `visionGetSlot`, `visionTrainColor`, `hmiSetCamera` |
+| Executor | `handlers/vision.py` — 3 handlers: `vision_snapshot`, `vision_scan`, `vision_train_color` |
+| Server-side cache | `_vision_frame_cache` — snapshot menyimpan frame, scan/train pakai langsung |
+| HMI | `setCamera()` + `getVisionROI()` — display image + interactive ROI config |
+| Blockly | 5 blocks: `visionSnapshot`, `visionScan`, `visionGetSlot`, `visionTrainColor`, `hmiSetCamera` |
 | Counting | Slot-based with gap detection |
-| Color Training | HSV sampling dari ROI, simpan JSON |
+| Color Training | HSV sampling dari cached frame + ROI dari HMI, simpan JSON |
 | Image Transport | `sensor_msgs/CompressedImage` (fallback: `std_msgs/String` base64) |
 
 **Dependencies baru**:
