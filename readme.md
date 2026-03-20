@@ -44,18 +44,6 @@ bab pada dokumen merepresentasikan alur rencana pengembangan.
 
 this sub title list is short by priority
 
-## **Launch files** 
-ROS2 launch files to start all nodes with one command includ node in raspberry pi. composite blockly dan executor yang memiliki composit 2 jenis yaitu menggunakan executor dummy dan executor-hw.
-
-## **overwhelm BLOCKS.md**
-
-please analyse and split BLOCKS.md into some file. sarankan padaku apa saja yang perlu di pindah sebelum melakukannya. this my purpose path
-```
-src/blockly_app
-├── docs             
-|   ├── BLOCKS.md       # table of sub content blocks
-│   └── <sub bab>.md    # content
-```
 ## **Feasibility Study to implement Vision Sensor**
 
 coba kamu lakukan penelitian literatur untuk penerapan vision sensor dengan kemampuan berikut ini 
@@ -350,19 +338,54 @@ Fields: `X (cm)`, `Y (cm)`, `Heading (rad)`, `Vel X (cm/s)`, `Vel Y (cm/s)`, `An
 - [ ] End-to-end: Blockly → executor (real) → cache `odometry_encoder/odom` → return JSON
 - [x] Integration test `test_block_odometry.py` passes di dummy mode
 
-## 6 Enhancement: HMI Interactive Widgets — Button, Slider, Switch : [x]
-Menambahkan widget **control** (dua arah: user input ↔ code): Button, Slider, dan Switch — mengikuti konsep LabVIEW "Controls vs Indicators". Setiap control memiliki SET block (statement) dan GET block (value). Semua client-side JS, tidak ada perubahan Python/ROS2.
 
-Detail implementasi: [docs/architecture.md](docs/architecture.md) §2.4, [BLOCKS.md](src/blockly_app/BLOCKS.md) §7.16, [troubleshooting.md](docs/troubleshooting.md).
+## 6 Enhancement: Split BLOCKS.md Documentation : [x]
+BLOCKS.md (1225 baris) dipecah menjadi 4 file terpisah + index di `src/blockly_app/docs/` agar lebih mudah dinavigasi.
 
 ### Definition Of Done
-- [x] 6 block file (SET + GET untuk button, slider, switch)
-- [x] `hmi-manager.js` — render, setter, getter, user interaction tracking, layout serialization
-- [x] `hmi-preview.js` — design-time preview + auto-increment widget names
-- [x] `manifest.js` — 6 entry baru
-- [x] CSS untuk button, slider, switch di `index.html`
-- [x] Bug fix: `highlightBlock` periodic macrotask yield (`debug-engine.js`)
-- [x] Bug fix: `pointerdown` instead of `click` for button/switch (`hmi-manager.js`)
-- [x] Bug fix: `_userState` / `_userHasInteracted` tracking for switch/slider (`hmi-manager.js`)
-- [x] Bug fix: auto-increment duplicate widget names (`hmi-preview.js`)
+- [x] `docs/BLOCKS.md` — index / table of contents (~40 baris)
+- [x] `docs/01-quickstart.md` — walkthrough end-to-end menambah block baru
+- [x] `docs/02-block-api-ref.md` — API reference `BlockRegistry.register()`, `definition.init`
+- [x] `docs/03-templates.md` — 6 template copy-paste (A–F)
+- [x] `docs/04-examples.md` — contoh real (`digitalOut`, `digitalIn`, `delay`) + tabel kategori
+- [x] Semua referensi ke BLOCKS.md di-update (README.md, DOCUMENTATION.md, blockly_interfaces/README.md, readme.md)
+- [x] Original `BLOCKS.md` dihapus
+
+## 8 Enhancement: Launch Files — Desktop Bringup : [ ]
+ROS2 launch files untuk menjalankan executor + blockly_app dengan satu command. Package `amr_bringup` (ament_python, launch-only).
+
+### Implementasi
+
+#### A. Package Structure
+```
+src/amr_bringup/
+├── package.xml
+├── setup.py / setup.cfg
+├── resource/amr_bringup
+├── amr_bringup/__init__.py
+├── launch/
+│   ├── blockly.launch.py        # executor (dummy) + blockly_app
+│   └── blockly_hw.launch.py     # executor (real)  + blockly_app
+└── config/                      # reserved untuk Pi nodes YAML nanti
+```
+
+#### B. Pixi Tasks
+```bash
+pixi run launch-blockly      # executor dummy + app (development)
+pixi run launch-blockly-hw   # executor real + app (Pi nodes harus sudah jalan)
+```
+
+#### C. Catatan
+- `blockly_app` diluncurkan via `ExecuteProcess` (bukan `Node()`) karena pywebview memerlukan main thread ownership
+- Pi nodes (gpio, pca9685, as5600) akan dibahas terpisah — kemungkinan menggunakan C++ composition (`rclcpp_components`) untuk optimasi resource di Raspberry Pi
+- Ctrl+C menghentikan semua node sekaligus
+
+### Definition Of Done
+- [x] `src/amr_bringup/` package scaffolding (package.xml, setup.py, setup.cfg, resource)
+- [x] `launch/blockly.launch.py` — executor dummy + app
+- [x] `launch/blockly_hw.launch.py` — executor real + app
+- [x] Pixi tasks: `build-bringup`, `launch-blockly`, `launch-blockly-hw`
+- [x] `pixi run launch-blockly` berhasil menjalankan executor + app
+- [x] `pixi run launch-blockly-hw` berhasil menjalankan executor (real) + app
+- [x] Ctrl+C menghentikan semua proses
 

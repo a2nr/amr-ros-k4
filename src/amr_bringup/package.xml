@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>amr_bringup</name>
+  <version>0.1.0</version>
+  <description>Launch files for AMR ROS2 Kiwi Wheel system bringup</description>
+  <maintainer email="dev@example.com">developer</maintainer>
+  <license>MIT</license>
+
+  <exec_depend>blockly_executor</exec_depend>
+  <exec_depend>blockly_app</exec_depend>
+  <exec_depend>ros2launch</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

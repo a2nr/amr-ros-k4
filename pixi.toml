@@ -43,6 +43,9 @@ executor         = { cmd = "bash -c 'source install/setup.bash && ros2 run block
 executor-hw      = { cmd = "bash -c 'source install/setup.bash && ros2 run blockly_executor executor_node --ros-args -p use_real_hardware:=true'", depends-on = ["build-executor"] }
 app              = { cmd = "bash -c 'source install/setup.bash && python -m blockly_app.app'", depends-on = ["build-app"] }
 test             = { cmd = "bash -c 'source install/setup.bash && PYTHONPATH=$PYTHONPATH:src/blockly_executor pytest src/blockly_executor/test/ -v'", depends-on = ["build-interfaces"] }
+build-bringup    = { cmd = "colcon build --symlink-install --packages-select amr_bringup", depends-on = ["build-interfaces"] }
+launch-blockly   = { cmd = "bash -c 'source install/setup.bash && ros2 launch amr_bringup blockly.launch.py'", depends-on = ["build-bringup", "build-executor", "build-app"] }
+launch-blockly-hw = { cmd = "bash -c 'source install/setup.bash && ros2 launch amr_bringup blockly_hw.launch.py'", depends-on = ["build-bringup", "build-executor", "build-app"] }
 setup-ui         = "npm install blockly gridstack && mkdir -p src/blockly_app/blockly_app/ui/vendor && cp node_modules/blockly/blockly.min.js src/blockly_app/blockly_app/ui/vendor/ && cp node_modules/blockly/javascript_compressed.js src/blockly_app/blockly_app/ui/vendor/ && cp node_modules/blockly/blocks_compressed.js src/blockly_app/blockly_app/ui/vendor/ && cp node_modules/blockly/msg/en.js src/blockly_app/blockly_app/ui/vendor/ && cp node_modules/gridstack/dist/gridstack-all.js src/blockly_app/blockly_app/ui/vendor/ && cp node_modules/gridstack/dist/gridstack.min.css src/blockly_app/blockly_app/ui/vendor/"
 
 [target.linux-aarch64.tasks]

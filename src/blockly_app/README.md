@@ -182,4 +182,4 @@ All block files registered in [`manifest.js`](blockly_app/ui/blockly/blocks/mani
 | `hmiSetSwitch.js` | HMI | Statement | Client-side (`HMI.setSwitch()`) |
 | `hmiGetSwitch.js` | HMI | Output | Client-side (`HMI.getSwitch()`) |
 
-Each block file calls `BlockRegistry.register()` with all metadata, so the toolbox is automatically generated. See [BLOCKS.md](BLOCKS.md) for the full guide to creating blocks.
+Each block file calls `BlockRegistry.register()` with all metadata, so the toolbox is automatically generated. See [BLOCKS.md](docs/BLOCKS.md) for the full guide to creating blocks.

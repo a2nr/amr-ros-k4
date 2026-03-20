@@ -14,12 +14,13 @@ See [readme.md](readme.md) for project overview and status.
 | Troubleshooting & known issues | [docs/troubleshooting.md](docs/troubleshooting.md) |
 | Guide: adding a new ROS2 package | [docs/ros2-package-guide.md](docs/ros2-package-guide.md) |
 | `blockly_app` — file reference (incl. HMI core modules) | [src/blockly_app/README.md](src/blockly_app/README.md) |
-| `blockly_app` — creating blocks (ROS2 action + client-side + HMI) | [src/blockly_app/BLOCKS.md](src/blockly_app/BLOCKS.md) |
+| `blockly_app` — creating blocks (ROS2 action + client-side + HMI) | [src/blockly_app/docs/BLOCKS.md](src/blockly_app/docs/BLOCKS.md) |
 | `blockly_executor` — file reference, handlers & testing guide | [src/blockly_executor/README.md](src/blockly_executor/README.md) |
 | `blockly_interfaces` — ROS2 action & message interfaces | [src/blockly_interfaces/README.md](src/blockly_interfaces/README.md) |
 | `gpio_node` — Raspberry Pi GPIO node (C++, libgpiod) | [src/gpio_node/README.md](src/gpio_node/README.md) |
 | `pca9685_node` — PCA9685 16-channel PWM controller (C++, I2C) | [src/pca9685_node/README.md](src/pca9685_node/README.md) |
 | `as5600_node` — AS5600 12-bit magnetic encoder (C++, I2C) | [src/as5600_node/README.md](src/as5600_node/README.md) |
+| `amr_bringup` — ROS2 launch files (desktop bringup) | [src/amr_bringup/launch/](src/amr_bringup/launch/) |
 
 ---
 
@@ -33,6 +34,8 @@ pixi run build-interfaces     # must build interfaces first
 pixi run build                # build all packages
 pixi run setup-ui             # download Blockly JS vendor files (first time, needs internet)
 
+pixi run launch-blockly       # one command — executor (dummy) + app
+# or separately:
 pixi run executor             # Terminal 1 — start Action Server
 pixi run app                  # Terminal 2 — start desktop GUI
 ```

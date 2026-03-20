@@ -386,6 +386,15 @@
                                                                                             }
                                                                                           }
                                                                                         }
+                                                                                      },
+                                                                                      "next": {
+                                                                                        "block": {
+                                                                                          "type": "delay",
+                                                                                          "id": "U,h/dhHRu214`~i0M6u$",
+                                                                                          "fields": {
+                                                                                            "DURATION_MS": 1000
+                                                                                          }
+                                                                                        }
                                                                                       }
                                                                                     }
                                                                                   }
@@ -743,7 +752,7 @@
       "name": "Switch1",
       "type": "switch",
       "x": 2,
-      "y": 6,
+      "y": 7,
       "w": 2,
       "h": 1,
       "config": {}

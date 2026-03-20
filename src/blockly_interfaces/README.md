@@ -79,4 +79,4 @@ from blockly_interfaces.msg import GpioWrite, GpioRead, PwmWrite, EncoderRead
 
 ## Usage
 
-See [`src/blockly_executor/README.md`](../blockly_executor/README.md) for how the executor uses this interface, and [`src/blockly_app/BLOCKS.md`](../blockly_app/BLOCKS.md#79-data-flow-js-block--python-handler--hardware) for the full data flow from JS block to hardware.
+See [`src/blockly_executor/README.md`](../blockly_executor/README.md) for how the executor uses this interface, and [`src/blockly_app/docs/01-quickstart.md`](../blockly_app/docs/01-quickstart.md#data-flow-js-block--python-handler--hardware) for the full data flow from JS block to hardware.
